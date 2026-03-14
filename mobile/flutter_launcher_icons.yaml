@@ -1,0 +1,15 @@
+flutter_launcher_icons:
+  image_path: "assets/images/sushi-xl logo.png"
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: "assets/images/sushi-xl logo.png"
+    background_color: "#FFFFFF"
+    theme_color: "#EE482B"
+  windows:
+    generate: true
+    image_path: "assets/images/sushi-xl logo.png"
+  macos:
+    generate: true
+    image_path: "assets/images/sushi-xl logo.png"

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Yandex Map</title>
+    <style>
+      html,
+      body,
+      #map {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: linear-gradient(180deg, #d8edf7 0%, #f4f7f9 100%);
+      }
+
+      #error {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        top: 12px;
+        z-index: 1000;
+        display: none;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #b91c1c;
+        background: rgba(255, 255, 255, 0.97);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="error"></div>
+    <script>
+      (function () {
+        var DEFAULT_LAT = 41.2995;
+        var DEFAULT_LON = 69.2401;
+        var DEFAULT_ZOOM = 12.5;
+
+        var state = {
+          key: '',
+          center: { lat: DEFAULT_LAT, lon: DEFAULT_LON },
+          zoom: DEFAULT_ZOOM,
+          selectable: true,
+          marker: null,
+          userLocation: null,
+          embedId: ''
+        };
+
+        var map = null;
+        var mapProvider = 'none';
+        var markerPlacemark = null;
+        var userPlacemark = null;
+        var scriptRequested = false;
+        var fallbackScriptRequested = false;
+        var fallbackStyleInjected = false;
+        var mapCreated = false;
+
+        function post(type, payload) {
+          var message = JSON.stringify({ type: type, payload: payload || {} });
+          try {
+            if (window.MapBridge && typeof window.MapBridge.postMessage === 'function') {
+              window.MapBridge.postMessage(message);
+              return;
+            }
+          } catch (_) {}
+
+          if (window.parent && state.embedId) {
+            try {
+              var raw = payload || {};
+              if (type === 'map_click') {
+                window.parent.postMessage(
+                  {
+                    type: 'yamap_click',
+                    id: state.embedId,
+                    lat: raw.lat,
+                    lng: raw.lon
+                  },
+                  '*'
+                );
+              }
+            } catch (_) {}
+          }
+        }
+
+        function showError(message) {
+          var node = document.getElementById('error');
+          node.textContent = message || '';
+          node.style.display = message ? 'block' : 'none';
+          if (message) {
+            post('map_error', { message: message });
+          }
+        }
+
+        function installConsoleForwarding() {
+          ['log', 'warn', 'error'].forEach(function (level) {
+            var original = console[level];
+            console[level] = function () {
+              try {
+                var msg = Array.prototype.slice.call(arguments).join(' ');
+                post('console', { level: level, message: msg });
+              } catch (_) {}
+              return original.apply(console, arguments);
+            };
+          });
+
+          window.addEventListener('error', function (event) {
+            post('console', {
+              level: 'error',
+              message: (event && event.message) || 'window error'
+            });
+          });
+        }
+
+        function isValidLatLon(lat, lon) {
+          return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+        }
+
+        function removeMarker(target) {
+          if (!target || !map) {
+            return null;
+          }
+          try {
+            if (mapProvider === 'yandex' && map.geoObjects) {
+              map.geoObjects.remove(target);
+              return null;
+            }
+            if (mapProvider === 'leaflet' && map.removeLayer) {
+              map.removeLayer(target);
+              return null;
+            }
+          } catch (_) {}
+          return null;
+        }
+
+        function applyMarker(target, options) {
+          if (!map) {
+            return target;
+          }
+
+          target = removeMarker(target);
+
+          if (mapProvider === 'yandex') {
+            var properties = {};
+            if (options.title) {
+              properties.iconCaption = options.title;
+              properties.hintContent = options.title;
+              properties.balloonContentHeader = options.title;
+            }
+            if (options.subtitle) {
+              properties.balloonContentBody = options.subtitle;
+            }
+            var placemark = new ymaps.Placemark(
+              [options.lat, options.lon],
+              properties,
+              { preset: options.preset || 'islands#redDotIcon' }
+            );
+            map.geoObjects.add(placemark);
+            return placemark;
+          }
+
+          if (mapProvider === 'leaflet' && window.L) {
+            var color = options.color || '#ef4444';
+            var marker = window.L.circleMarker([options.lat, options.lon], {
+              radius: options.radius || 8,
+              color: color,
+              fillColor: color,
+              fillOpacity: 0.95,
+              weight: 2
+            }).addTo(map);
+            if (options.title || options.subtitle) {
+              var popup = [options.title || '', options.subtitle || '']
+                .filter(Boolean)
+                .join('<br/>');
+              if (popup) {
+                marker.bindPopup(popup);
+              }
+            }
+            return marker;
+          }
+
+          return target;
+        }
+
+        function renderState() {
+          if (!mapCreated || !map) {
+            return;
+          }
+
+          if (state.center && isValidLatLon(state.center.lat, state.center.lon)) {
+            if (mapProvider === 'yandex') {
+              map.setCenter([state.center.lat, state.center.lon], state.zoom || DEFAULT_ZOOM, {
+                duration: 100
+              });
+            } else if (mapProvider === 'leaflet') {
+              map.setView([state.center.lat, state.center.lon], state.zoom || DEFAULT_ZOOM, {
+                animate: true
+              });
+            }
+          }
+
+          if (state.marker && isValidLatLon(state.marker.lat, state.marker.lon)) {
+            markerPlacemark = applyMarker(markerPlacemark, {
+              lat: state.marker.lat,
+              lon: state.marker.lon,
+              title: state.marker.title,
+              subtitle: state.marker.subtitle,
+              preset: 'islands#redDotIcon',
+              color: '#ef4444'
+            });
+          } else {
+            markerPlacemark = removeMarker(markerPlacemark);
+          }
+
+          if (
+            state.userLocation &&
+            isValidLatLon(state.userLocation.lat, state.userLocation.lon)
+          ) {
+            userPlacemark = applyMarker(userPlacemark, {
+              lat: state.userLocation.lat,
+              lon: state.userLocation.lon,
+              title: state.userLocation.title,
+              subtitle: state.userLocation.subtitle,
+              preset: 'islands#blueCircleDotIcon',
+              color: '#2563eb'
+            });
+          } else {
+            userPlacemark = removeMarker(userPlacemark);
+          }
+        }
+
+        function createYandexMap() {
+          if (mapCreated || !window.ymaps || !window.ymaps.Map) {
+            return;
+          }
+          try {
+            map = new ymaps.Map('map', {
+              center: [state.center.lat, state.center.lon],
+              zoom: state.zoom || DEFAULT_ZOOM,
+              type: 'yandex#map',
+              controls: []
+            });
+            map.events.add('click', function (event) {
+              if (!state.selectable) {
+                return;
+              }
+              var coords = event.get('coords');
+              if (!coords || coords.length !== 2) {
+                return;
+              }
+              post('map_click', { lat: coords[0], lon: coords[1] });
+            });
+            mapProvider = 'yandex';
+            mapCreated = true;
+            showError('');
+            renderState();
+            post('map_ready', { provider: 'yandex' });
+          } catch (_) {
+            loadFallbackMapIfNeeded('Unable to create Yandex map');
+          }
+        }
+
+        function createFallbackMap() {
+          if (mapCreated || !window.L || !window.L.map) {
+            return;
+          }
+          try {
+            map = window.L.map('map', {
+              zoomControl: false,
+              attributionControl: false
+            });
+            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              minZoom: 3,
+              maxZoom: 19
+            }).addTo(map);
+            map.on('click', function (event) {
+              if (!state.selectable || !event || !event.latlng) {
+                return;
+              }
+              post('map_click', { lat: event.latlng.lat, lon: event.latlng.lng });
+            });
+            mapProvider = 'leaflet';
+            mapCreated = true;
+            showError('');
+            renderState();
+            post('map_ready', { provider: 'leaflet' });
+          } catch (_) {
+            showError('Unable to create fallback map.');
+          }
+        }
+
+        function loadFallbackMapIfNeeded(reason) {
+          post('console', {
+            level: 'warn',
+            message: 'Switching to fallback map: ' + String(reason || 'unknown reason')
+          });
+
+          if (window.L && window.L.map) {
+            createFallbackMap();
+            return;
+          }
+
+          if (!fallbackStyleInjected) {
+            fallbackStyleInjected = true;
+            var style = document.createElement('link');
+            style.rel = 'stylesheet';
+            style.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            style.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
+            style.crossOrigin = '';
+            document.head.appendChild(style);
+          }
+
+          if (fallbackScriptRequested) {
+            return;
+          }
+          fallbackScriptRequested = true;
+          var script = document.createElement('script');
+          script.id = 'leaflet-js-api';
+          script.async = true;
+          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+          script.crossOrigin = '';
+          script.onload = function () {
+            createFallbackMap();
+          };
+          script.onerror = function () {
+            showError('Failed to load fallback map script.');
+          };
+          document.head.appendChild(script);
+        }
+
+        function loadYandexScriptIfNeeded() {
+          if (mapCreated) {
+            return;
+          }
+          if (window.ymaps && window.ymaps.ready) {
+            window.ymaps.ready(createYandexMap);
+            return;
+          }
+          if (scriptRequested) {
+            return;
+          }
+          if (!state.key) {
+            loadFallbackMapIfNeeded('Yandex JS API key is empty');
+            return;
+          }
+          scriptRequested = true;
+          var script = document.createElement('script');
+          script.id = 'yandex-js-api';
+          script.async = true;
+          script.src =
+            'https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=' +
+            encodeURIComponent(state.key);
+          script.onload = function () {
+            if (!window.ymaps || !window.ymaps.ready) {
+              loadFallbackMapIfNeeded('Yandex JS API loaded but ymaps is unavailable');
+              return;
+            }
+            window.ymaps.ready(function () {
+              post('console', { level: 'log', message: 'ymaps.ready()' });
+              createYandexMap();
+            });
+          };
+          script.onerror = function () {
+            loadFallbackMapIfNeeded('Failed to load Yandex JS API script');
+          };
+          document.head.appendChild(script);
+        }
+
+        function applyCommand(command) {
+          if (!command || typeof command !== 'object') {
+            return;
+          }
+          try {
+            // Flutter drives the map entirely through these bridge commands.
+            switch (command.type) {
+              case 'init': {
+                state.key = String(command.key || state.key || '').trim();
+                state.selectable = command.selectable !== false;
+                var initLat = Number(command.defaultLat);
+                var initLon = Number(command.defaultLon);
+                var initZoom = Number(command.defaultZoom);
+                if (isValidLatLon(initLat, initLon)) {
+                  state.center = { lat: initLat, lon: initLon };
+                }
+                if (Number.isFinite(initZoom)) {
+                  state.zoom = initZoom;
+                }
+                showError('');
+                loadYandexScriptIfNeeded();
+                break;
+              }
+              case 'setCenter': {
+                var lat = Number(command.lat);
+                var lon = Number(command.lon);
+                var zoom = Number(command.zoom);
+                if (!isValidLatLon(lat, lon)) {
+                  showError('Invalid center coordinates.');
+                  return;
+                }
+                state.center = { lat: lat, lon: lon };
+                state.zoom = Number.isFinite(zoom) ? zoom : state.zoom;
+                renderState();
+                break;
+              }
+              case 'setMarker':
+              case 'showSelectedMarker': {
+                var markerLat = Number(command.lat);
+                var markerLon = Number(command.lon);
+                if (!isValidLatLon(markerLat, markerLon)) {
+                  return;
+                }
+                state.marker = {
+                  lat: markerLat,
+                  lon: markerLon,
+                  title: String(command.title || command.text || ''),
+                  subtitle: String(command.subtitle || '')
+                };
+                renderState();
+                break;
+              }
+              case 'clearMarker':
+                state.marker = null;
+                renderState();
+                break;
+              case 'setUserLocation':
+              case 'showUserMarker': {
+                var userLat = Number(command.lat);
+                var userLon = Number(command.lon);
+                if (!isValidLatLon(userLat, userLon)) {
+                  return;
+                }
+                state.userLocation = {
+                  lat: userLat,
+                  lon: userLon,
+                  title: String(command.title || ''),
+                  subtitle: String(command.subtitle || '')
+                };
+                renderState();
+                break;
+              }
+              case 'clearUserLocation':
+                state.userLocation = null;
+                renderState();
+                break;
+              case 'showAddressLabel':
+                if (state.marker) {
+                  state.marker.title = String(command.text || '').trim();
+                  renderState();
+                }
+                break;
+              case 'setSelectable':
+                state.selectable = command.value !== false;
+                break;
+              case 'clearError':
+                showError('');
+                break;
+              default:
+                post('console', {
+                  level: 'warn',
+                  message: 'Unknown command: ' + String(command.type || '')
+                });
+            }
+          } catch (error) {
+            showError('Map command processing failed.');
+          }
+        }
+
+        function bootstrapFromQuery() {
+          try {
+            var params = new URLSearchParams(window.location.search);
+            var key = params.get('key');
+            var lat = Number(params.get('lat'));
+            var lon = Number(params.get('lng'));
+            var zoom = Number(params.get('zoom'));
+            state.embedId = params.get('id') || '';
+            state.selectable = params.get('selectable') !== '0';
+            if (key) {
+              state.key = key;
+            }
+            if (isValidLatLon(lat, lon)) {
+              state.center = { lat: lat, lon: lon };
+            }
+            if (Number.isFinite(zoom)) {
+              state.zoom = zoom;
+            }
+            var markers = (params.get('markers') || '').split('|').filter(Boolean);
+            if (markers.length > 0) {
+              var parts = markers[0].split(',');
+              if (parts.length === 2) {
+                var markerLat = Number(parts[0]);
+                var markerLon = Number(parts[1]);
+                if (isValidLatLon(markerLat, markerLon)) {
+                  state.marker = {
+                    lat: markerLat,
+                    lon: markerLon,
+                    title: '',
+                    subtitle: ''
+                  };
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        function installWebMessageBridge() {
+          window.addEventListener('message', function (event) {
+            var data = event.data;
+            if (!data || data.type !== 'yamap_update') {
+              return;
+            }
+            if (state.embedId && data.id !== state.embedId) {
+              return;
+            }
+            applyCommand({
+              type: 'setCenter',
+              lat: data.lat,
+              lon: data.lng,
+              zoom: data.zoom
+            });
+            applyCommand({
+              type: 'setSelectable',
+              value: data.selectable
+            });
+            var markers = Array.isArray(data.markers) ? data.markers : [];
+            if (markers.length > 0) {
+              var parts = String(markers[0]).split(',');
+              if (parts.length === 2) {
+                applyCommand({
+                  type: 'setMarker',
+                  lat: Number(parts[0]),
+                  lon: Number(parts[1]),
+                  title: '',
+                  subtitle: ''
+                });
+              }
+            } else {
+              applyCommand({ type: 'clearMarker' });
+            }
+          });
+        }
+
+        installConsoleForwarding();
+        bootstrapFromQuery();
+        installWebMessageBridge();
+        post('bridge_ready', {});
+        loadYandexScriptIfNeeded();
+
+        window.YandexMapBridge = {
+          receive: function (json) {
+            try {
+              var cmd = typeof json === 'string' ? JSON.parse(json) : json;
+              applyCommand(cmd);
+            } catch (_) {
+              showError('Invalid command payload.');
+            }
+          }
+        };
+      })();
+    </script>
+  </body>
+</html>

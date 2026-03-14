@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Yandex Map</title>
+    <style>
+      html, body, #map {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      function qs(name, def) {
+        const params = new URLSearchParams(window.location.search);
+        return params.get(name) || def;
+      }
+
+      const key = qs('key', '');
+      const lat = parseFloat(qs('lat', '41.2995'));
+      const lng = parseFloat(qs('lng', '69.2401'));
+      const zoom = parseFloat(qs('zoom', '14'));
+      const selectable = qs('selectable', '0') === '1';
+      const markersRaw = qs('markers', '');
+      const viewId = qs('id', '');
+
+      const script = document.createElement('script');
+      script.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${encodeURIComponent(key)}`;
+      script.onload = () => {
+        ymaps.ready(() => {
+          const map = new ymaps.Map('map', { center: [lat, lng], zoom: zoom });
+          let selected;
+          let tapHandlerAttached = false;
+
+          function applyMarkers(markersList) {
+            map.geoObjects.removeAll();
+            markersList.forEach((pair) => {
+              const parts = String(pair).split(',');
+              if (parts.length === 2) {
+                const mlat = parseFloat(parts[0]);
+                const mlng = parseFloat(parts[1]);
+                if (!Number.isNaN(mlat) && !Number.isNaN(mlng)) {
+                  const placemark = new ymaps.Placemark([mlat, mlng], {}, { preset: 'islands#redIcon' });
+                  map.geoObjects.add(placemark);
+                }
+              }
+            });
+          }
+
+          function bindTapIfNeeded(isSelectable) {
+            if (!isSelectable || tapHandlerAttached) return;
+            tapHandlerAttached = true;
+            map.events.add('click', function (e) {
+              const coords = e.get('coords');
+              if (selected) {
+                map.geoObjects.remove(selected);
+              }
+              selected = new ymaps.Placemark(coords, {}, { preset: 'islands#redIcon' });
+              map.geoObjects.add(selected);
+              window.parent.postMessage({ type: 'yamap_click', id: viewId, lat: coords[0], lng: coords[1] }, '*');
+            });
+          }
+
+          applyMarkers(markersRaw ? markersRaw.split('|') : []);
+          bindTapIfNeeded(selectable);
+
+          window.addEventListener('message', (event) => {
+            const data = event.data || {};
+            if (data.type !== 'yamap_update' || data.id !== viewId) return;
+            const nlat = Number(data.lat);
+            const nlng = Number(data.lng);
+            const nzoom = Number(data.zoom);
+            if (!Number.isNaN(nlat) && !Number.isNaN(nlng)) {
+              map.setCenter([nlat, nlng], Number.isNaN(nzoom) ? map.getZoom() : nzoom, { duration: 120 });
+            }
+            if (Array.isArray(data.markers)) {
+              applyMarkers(data.markers);
+            }
+            bindTapIfNeeded(Boolean(data.selectable));
+          });
+        });
+      };
+      document.head.appendChild(script);
+    </script>
+  </body>
+</html>

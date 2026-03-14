@@ -1,0 +1,56 @@
+import 'sushi_localizations.dart';
+
+String localizeCategoryName(String rawName, SushiLocalizations t) {
+  const mapping = {
+    'Drinks': 'cat_drinks',
+    'Rolls': 'cat_rolls',
+    'Salads': 'cat_salads',
+    'Sets': 'cat_sets',
+    'Sauces': 'cat_sauces',
+    'Baked': 'cat_baked',
+    'Mini rolls': 'cat_mini_rolls',
+    'Cold dishes': 'cat_cold_dishes',
+    'Fried rolls': 'cat_fried_rolls',
+    'Kimbap': 'cat_kimbap',
+    'Hot dishes': 'cat_hot_dishes',
+    'New items': 'cat_new_items',
+    'Bread': 'cat_bread',
+    'Soups': 'cat_soups',
+    'Desserts': 'cat_desserts',
+    'Ichimliklar': 'cat_drinks',
+    'Rollar': 'cat_rolls',
+    'Rolllar': 'cat_rolls',
+    'Salatlar': 'cat_salads',
+    'Setlar': 'cat_sets',
+    'Souslar': 'cat_sauces',
+    'Pishirilganlar': 'cat_baked',
+    'Mini rolllar': 'cat_mini_rolls',
+    'Sovuq taomlar': 'cat_cold_dishes',
+    'Qovurilgan rolllar': 'cat_fried_rolls',
+    'Issiq taomlar': 'cat_hot_dishes',
+    'Yangi mahsulotlar': 'cat_new_items',
+    'Non': 'cat_bread',
+    "Sho'rvalar": 'cat_soups',
+    'Desertlar': 'cat_desserts',
+    'Напитки': 'cat_drinks',
+    'Роллы': 'cat_rolls',
+    'Суши': 'cat_sushi',
+    'Салаты': 'cat_salads',
+    'Сеты': 'cat_sets',
+    'Соусы': 'cat_sauces',
+    'Запеченные': 'cat_baked',
+    'Мини роллы': 'cat_mini_rolls',
+    'Холодные блюда': 'cat_cold_dishes',
+    'Жаренные роллы': 'cat_fried_rolls',
+    'Кимпаб': 'cat_kimbap',
+    'Горячка': 'cat_hot_dishes',
+    'Новинки': 'cat_new_items',
+    'Хлеб': 'cat_bread',
+    'Супы': 'cat_soups',
+    'Десерты': 'cat_desserts',
+  };
+
+  final key = mapping[rawName];
+  if (key == null) return rawName;
+  return t.t(key);
+}
