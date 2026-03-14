@@ -1,0 +1,5 @@
+// Copy to ReleaseConfig.xcconfig and keep the real file out of Git.
+SUSHIXL_BUNDLE_ID=uz.sushixl.app
+SUSHIXL_DEVELOPMENT_TEAM=YOUR_APPLE_TEAM_ID
+YANDEX_MAPS_API_KEY=YOUR_YANDEX_MAPS_API_KEY
+APS_ENVIRONMENT=production

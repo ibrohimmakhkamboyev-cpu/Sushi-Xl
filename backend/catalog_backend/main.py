@@ -152,6 +152,12 @@ MENU_SOURCE = os.getenv('MENU_SOURCE', 'database').strip().lower()
 UPLOADS_DIR = ROOT / 'data' / 'uploads'
 _poster_menu_cache_data: Optional[dict[str, list[dict[str, Any]]]] = None
 _poster_menu_cache_at: float = 0.0
+PUSH_NOTIFICATIONS_ENABLED = os.getenv('PUSH_NOTIFICATIONS_ENABLED', 'false').strip().lower() in {
+    '1',
+    'true',
+    'yes',
+    'on',
+}
 FCM_SERVER_KEY = os.getenv('FCM_SERVER_KEY', '').strip()
 FIREBASE_PROJECT_ID = os.getenv('FIREBASE_PROJECT_ID', '').strip()
 FIREBASE_SERVICE_ACCOUNT_FILE = (
@@ -302,12 +308,32 @@ def _firebase_project_id() -> str:
     return ''
 
 
+def _push_config_error() -> Optional[str]:
+    if not PUSH_NOTIFICATIONS_ENABLED:
+        return None
+    if _firebase_service_account_info():
+        if not _firebase_project_id():
+            return 'Push is enabled, but FIREBASE_PROJECT_ID could not be resolved.'
+        return None
+    if FCM_SERVER_KEY:
+        return (
+            'FCM_SERVER_KEY is deprecated for production use. '
+            'Use FIREBASE_SERVICE_ACCOUNT_FILE or FIREBASE_SERVICE_ACCOUNT_JSON.'
+        )
+    return (
+        'Push is enabled, but Firebase HTTP v1 credentials are missing. '
+        'Set FIREBASE_SERVICE_ACCOUNT_FILE or FIREBASE_SERVICE_ACCOUNT_JSON.'
+    )
+
+
 def _push_delivery_mode() -> str:
+    if not PUSH_NOTIFICATIONS_ENABLED:
+        return 'disabled_by_config'
     if _firebase_service_account_info():
         return 'firebase_http_v1'
     if FCM_SERVER_KEY:
-        return 'legacy_server_key'
-    return 'disabled'
+        return 'legacy_server_key_deprecated'
+    return 'misconfigured'
 
 
 def _is_production_env() -> bool:
@@ -475,8 +501,11 @@ def health() -> dict[str, Any]:
         'poster_enabled': poster_client.enabled,
         'poster_menu_writable': poster_client.menu_writable,
         'poster_config_error': poster_client.config_error,
+        'push_enabled': PUSH_NOTIFICATIONS_ENABLED,
         'push_delivery_mode': _push_delivery_mode(),
+        'push_config_error': _push_config_error(),
         'firebase_project_id': _firebase_project_id() or None,
+        'release_guards_enforced': ENFORCE_PROD_GUARDS,
     }
 
 
@@ -3064,6 +3093,14 @@ def _dispatch_notification_delivery(conn, notification_row: dict[str, Any]) -> l
 
 
 def _send_fcm_push(notification_row: dict[str, Any]) -> list[dict[str, str]]:
+    if not PUSH_NOTIFICATIONS_ENABLED:
+        return [
+            {
+                'channel': 'push',
+                'status': 'skipped',
+                'message': 'Push notifications are disabled by configuration.',
+            }
+        ]
     service_account_info = _firebase_service_account_info()
     if service_account_info:
         return _send_fcm_push_http_v1(notification_row, service_account_info)
@@ -3074,7 +3111,7 @@ def _send_fcm_push(notification_row: dict[str, Any]) -> list[dict[str, str]]:
             'channel': 'push',
             'status': 'failed',
             'message': (
-                'Firebase push is not configured. '
+                'Push is enabled, but Firebase HTTP v1 credentials are missing. '
                 'Set FIREBASE_SERVICE_ACCOUNT_FILE or FIREBASE_SERVICE_ACCOUNT_JSON.'
             ),
         }
@@ -3245,8 +3282,8 @@ def _send_fcm_push_http_v1(
 
 
 def _send_fcm_push_legacy(notification_row: dict[str, Any]) -> list[dict[str, str]]:
-    # Legacy server-key delivery remains as a fallback for older deployments.
-    # Modern production setup should use Firebase HTTP v1 with a service account.
+    # Legacy server-key delivery remains only as a temporary compatibility path.
+    # Public production releases should migrate to Firebase HTTP v1 service accounts.
     if not FCM_SERVER_KEY:
         return [
             {

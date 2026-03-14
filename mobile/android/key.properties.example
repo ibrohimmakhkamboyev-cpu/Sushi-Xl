@@ -1,0 +1,6 @@
+# Copy to mobile/android/key.properties for local release builds.
+# Do not commit the real key.properties file.
+storeFile=/absolute/path/to/sushixl-release.jks
+storePassword=__RELEASE_STORE_PASSWORD__
+keyAlias=__RELEASE_KEY_ALIAS__
+keyPassword=__RELEASE_KEY_PASSWORD__

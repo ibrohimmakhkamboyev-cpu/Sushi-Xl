@@ -1,0 +1,60 @@
+name: release-readiness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-and-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Python compile check
+        run: python3 -m compileall backend/catalog_backend
+      - name: Admin panel JavaScript syntax
+        run: find frontend/admin-panel -name '*.js' -print0 | xargs -0 -n1 node --check
+
+  android-mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter pub get
+        working-directory: mobile
+        run: flutter pub get
+      - name: Flutter analyze
+        working-directory: mobile
+        run: flutter analyze
+      - name: Flutter test
+        working-directory: mobile
+        run: flutter test
+      - name: Android debug build verification
+        working-directory: mobile
+        run: flutter build apk --debug
+
+  ios-structure:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter pub get
+        working-directory: mobile
+        run: flutter pub get
+      - name: iOS simulator build verification
+        working-directory: mobile
+        run: flutter build ios --simulator --no-codesign

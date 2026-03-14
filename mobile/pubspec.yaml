@@ -1,7 +1,7 @@
 name: sushi_xl
 publish_to: "none"
 description: Sushi-XL ordering app
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

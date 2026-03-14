@@ -1,7 +1,6 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id "dev.flutter.flutter-gradle-plugin"
     id "com.google.gms.google-services"
 }
@@ -14,46 +13,122 @@ if (localPropertiesFile.exists()) {
     }
 }
 
-def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
-if (flutterVersionCode == null) {
-    flutterVersionCode = "1"
+def signingProperties = new Properties()
+def signingPropertiesFile = rootProject.file("key.properties")
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withReader("UTF-8") { reader ->
+        signingProperties.load(reader)
+    }
 }
 
-def flutterVersionName = localProperties.getProperty("flutter.versionName")
-if (flutterVersionName == null) {
-    flutterVersionName = "1.0"
+def readSetting = { String key, String fallback = "" ->
+    def fromGradle = project.findProperty(key)
+    if (fromGradle != null && fromGradle.toString().trim()) {
+        return fromGradle.toString().trim()
+    }
+    def fromEnv = System.getenv(key)
+    if (fromEnv != null && fromEnv.toString().trim()) {
+        return fromEnv.toString().trim()
+    }
+    def fromLocal = localProperties.getProperty(key)
+    if (fromLocal != null && fromLocal.toString().trim()) {
+        return fromLocal.toString().trim()
+    }
+    return fallback
 }
+
+def readSigningSetting = { String key ->
+    def fromProperty = signingProperties.getProperty(key)
+    if (fromProperty != null && fromProperty.toString().trim()) {
+        return fromProperty.toString().trim()
+    }
+    def envKey = "SUSHIXL_" + key.toUpperCase(Locale.US).replace('.', '_')
+    def fromEnv = System.getenv(envKey)
+    if (fromEnv != null && fromEnv.toString().trim()) {
+        return fromEnv.toString().trim()
+    }
+    return ""
+}
+
+def flutterVersionCode = readSetting("flutter.versionCode", "1")
+def flutterVersionName = readSetting("flutter.versionName", "1.0.0")
+def androidApplicationId = "uz.sushixl.app"
+def yandexMapsApiKey = readSetting("YANDEX_MAPS_API_KEY", "")
+
+def releaseStoreFile = readSigningSetting("storeFile")
+def releaseStorePassword = readSigningSetting("storePassword")
+def releaseKeyAlias = readSigningSetting("keyAlias")
+def releaseKeyPassword = readSigningSetting("keyPassword")
+def releaseSigningReady = [
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+].every { it != null && it.toString().trim() }
 
 android {
-    namespace = "com.example.mobile"
+    namespace = androidApplicationId
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
+        applicationId = androidApplicationId
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
+        resValue "string", "yandex_maps_api_key", yandexMapsApiKey
+    }
+
+    signingConfigs {
+        release {
+            if (releaseSigningReady) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            if (releaseSigningReady) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+tasks.configureEach { task ->
+    if (task.name in ["packageRelease", "assembleRelease", "bundleRelease"]) {
+        task.doFirst {
+            if (!releaseSigningReady) {
+                throw new GradleException(
+                    "Android release signing is not configured. " +
+                    "Provide key.properties or SUSHIXL_STORE_FILE, " +
+                    "SUSHIXL_STORE_PASSWORD, SUSHIXL_KEY_ALIAS, and SUSHIXL_KEY_PASSWORD."
+                )
+            }
+        }
+    }
 }

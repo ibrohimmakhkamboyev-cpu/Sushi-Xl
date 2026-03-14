@@ -1,2 +1,8 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
 #include "Generated.xcconfig"
+
+SUSHIXL_BUNDLE_ID=uz.sushixl.app
+SUSHIXL_DEVELOPMENT_TEAM=
+YANDEX_MAPS_API_KEY=
+APS_ENVIRONMENT=production
+#include? "ReleaseConfig.xcconfig"
