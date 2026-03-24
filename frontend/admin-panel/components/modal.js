@@ -37,6 +37,51 @@ export function openConfirmModal({ title = 'Confirm', message = '', confirmText 
   });
 }
 
+export function openDrawer({
+  title = '',
+  subtitle = '',
+  content = '',
+  closeText = 'Close',
+}) {
+  return new Promise((resolve) => {
+    const root = document.createElement('div');
+    root.className = 'drawer-backdrop';
+    root.innerHTML = `
+      <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+        <div class="drawer-head">
+          <div>
+            <h3>${escapeHtml(title)}</h3>
+            ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
+          </div>
+          <button type="button" class="drawer-close" aria-label="${escapeHtml(closeText)}">&times;</button>
+        </div>
+        <div class="drawer-body">${content}</div>
+      </aside>
+    `;
+
+    const dismiss = () => {
+      closeModal(root);
+      resolve();
+    };
+
+    root.addEventListener('click', (event) => {
+      if (event.target === root) dismiss();
+    });
+    root.querySelector('.drawer-close')?.addEventListener('click', dismiss);
+    document.addEventListener(
+      'keydown',
+      function onKeyDown(event) {
+        if (event.key === 'Escape') {
+          document.removeEventListener('keydown', onKeyDown);
+          dismiss();
+        }
+      },
+      { once: true },
+    );
+    document.body.appendChild(root);
+  });
+}
+
 export function openFormModal({ title, fields, initial = {}, submitText = 'Save', cancelText = 'Cancel' }) {
   return new Promise((resolve) => {
     const root = document.createElement('div');

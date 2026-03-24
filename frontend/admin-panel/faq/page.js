@@ -2,6 +2,7 @@ import { api } from '../services/api.js';
 import { escapeHtml, formatDate } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
 import { statusBadge } from '../components/badge.js';
+import { renderMetricGrid, renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 function pickLocalized(row, base, uiLang = 'en') {
   if (uiLang === 'ru') return row?.[`${base}Ru`] || row?.[base] || '';
@@ -58,14 +59,24 @@ export async function renderFaq(ctx) {
       return;
     }
 
+    const activeCount = state.rows.filter((row) => row.isActive).length;
+
     container.innerHTML = `
-      <section class="panel">
-        <div class="panel-head split">
-          <h2>${escapeHtml(t('faq_support'))}</h2>
-          <button class="btn btn-primary" id="add-faq">${escapeHtml(t('add_faq'))}</button>
-        </div>
-        <div id="faq-table"></div>
-      </section>
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Support content', 'Контент поддержки', 'Yordam kontenti'),
+        title: tr(uiLang, 'FAQ knowledge base', 'База знаний FAQ', 'FAQ bilim bazasi'),
+        description: tr(uiLang, 'Keep multilingual answers, sort order, and help-center readiness in a clearer editorial structure.', 'Поддерживайте многоязычные ответы, порядок сортировки и готовность help-центра в более ясной редакторской структуре.', 'Ko‘p tilli javoblar, tartib va yordam markazi tayyorgarligini aniqroq muharrir tuzilmasida boshqaring.'),
+      })}
+      ${renderMetricGrid([
+        { label: t('faq'), value: String(state.rows.length), tone: 'accent', helper: tr(uiLang, 'Knowledge entries', 'Элементы базы знаний', 'Bilim bazasi yozuvlari') },
+        { label: t('active'), value: String(activeCount), tone: 'success', helper: tr(uiLang, 'Visible answers', 'Видимые ответы', 'Ko‘rinadigan javoblar') },
+      ])}
+      ${renderSectionCard({
+        title: t('faq_support'),
+        description: tr(uiLang, 'Create, edit, and retire help content with better readability for operations teams.', 'Создавайте, редактируйте и отключайте help-контент с лучшей читаемостью для операционных команд.', 'Operatsion jamoalar uchun yaxshiroq o‘qiladigan yordam kontentini yarating, tahrirlang va o‘chiring.'),
+        actions: `<button class="btn btn-primary" id="add-faq">${escapeHtml(t('add_faq'))}</button>`,
+        body: '<div id="faq-table"></div>',
+      })}
     `;
 
     const tableRoot = container.querySelector('#faq-table');
@@ -106,6 +117,7 @@ export async function renderFaq(ctx) {
           draw();
         },
         emptyText: t('no_data'),
+        minWidth: '1020px',
       });
 
       tableRoot.querySelectorAll('[data-action="edit"]').forEach((btn) => {

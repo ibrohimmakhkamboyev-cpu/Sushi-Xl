@@ -144,6 +144,9 @@ class SushiLocalizations {
       'support_short': 'Support',
       'profile_track_order': 'Track Order',
       'profile_track_order_subtitle': 'Track your delicious sushi in real time',
+      'request_cancellation': 'Request cancellation',
+      'request_cancellation_hint':
+          'Cancellation is handled by support while the order is still waiting or being prepared.',
       'profile_my_orders': 'My Orders',
       'profile_my_orders_subtitle': 'Reorder your favorite rolls instantly',
       'support_contacts': 'Support & Contacts',
@@ -195,12 +198,42 @@ class SushiLocalizations {
       'order_success_hero_subtitle':
           'Our chefs have started preparing your order.',
       'order_success_prepared_for_you': 'Freshly prepared\nfor you',
+      'estimated_delivery_title': 'Estimated delivery',
+      'eta_range_25_35': '25–35 min',
+      'eta_range_15_25': '15–25 min',
+      'eta_range_5_15': '5–15 min',
+      'eta_arrived': 'Arrived',
       'estimated_arrival': 'Estimated Arrival',
       'order_id': 'Order ID',
       'track_live_order': 'Track Live Order',
       'track_my_order': 'Track My Order',
       'return_home': 'Return Home',
       'back_to_menu': 'Back to Menu',
+      'tracking_progress_title': 'Delivery progress',
+      'order_stage_confirmed': 'Order confirmed',
+      'order_stage_cooking': 'Cooking',
+      'order_stage_on_the_way': 'On the way',
+      'order_stage_delivered': 'Delivered',
+      'delivery_route_title': 'Restaurant to your door',
+      'delivery_route_restaurant': 'Sushi XL',
+      'delivery_route_you': 'You',
+      'order_summary_empty': 'Order details will appear here in a moment.',
+      'order_bonus_title': 'Get 10% off your next order',
+      'order_bonus_subtitle':
+          'Rate this delivery after arrival and unlock a bonus for your next sushi night.',
+      'order_item_fallback': 'Item',
+      'tracking_stage_confirmed_title': 'Order confirmed',
+      'tracking_stage_confirmed_subtitle':
+          'We received your order and sent it straight to the kitchen.',
+      'tracking_stage_cooking_title': 'Our chefs are preparing your sushi',
+      'tracking_stage_cooking_subtitle':
+          'Fresh ingredients are being prepared for delivery right now.',
+      'tracking_stage_on_the_way_title': 'Courier is on the way',
+      'tracking_stage_on_the_way_subtitle':
+          'Your order has left the restaurant and is heading to you.',
+      'tracking_stage_delivered_title': 'Order delivered',
+      'tracking_stage_delivered_subtitle':
+          'Enjoy your meal and come back for your next Sushi XL order.',
       'profile_edit_title': 'Edit profile',
       'save': 'Save',
       'cat_drinks': 'Drinks',
@@ -382,6 +415,9 @@ class SushiLocalizations {
       'profile_track_order': 'Отследить заказ',
       'profile_track_order_subtitle':
           'Следите за своим вкусным суши-заказом в реальном времени',
+      'request_cancellation': 'Запросить отмену',
+      'request_cancellation_hint':
+          'Отмена оформляется через поддержку, пока заказ ещё ожидает или готовится.',
       'profile_my_orders': 'Мои заказы',
       'profile_my_orders_subtitle':
           'Быстро повторяйте любимые роллы в пару касаний',
@@ -435,12 +471,42 @@ class SushiLocalizations {
       'order_success_hero_subtitle':
           'Наши повара уже начали готовить ваш заказ.',
       'order_success_prepared_for_you': 'Свежо приготовлено\nдля вас',
+      'estimated_delivery_title': 'Оценочное время доставки',
+      'eta_range_25_35': '25–35 мин',
+      'eta_range_15_25': '15–25 мин',
+      'eta_range_5_15': '5–15 мин',
+      'eta_arrived': 'Доставлено',
       'estimated_arrival': 'Ожидаемое время',
       'order_id': 'Номер заказа',
       'track_live_order': 'Отслеживать заказ',
       'track_my_order': 'Отследить заказ',
       'return_home': 'На главную',
       'back_to_menu': 'Назад в меню',
+      'tracking_progress_title': 'Прогресс доставки',
+      'order_stage_confirmed': 'Заказ подтвержден',
+      'order_stage_cooking': 'Готовим',
+      'order_stage_on_the_way': 'В пути',
+      'order_stage_delivered': 'Доставлено',
+      'delivery_route_title': 'От ресторана до вашей двери',
+      'delivery_route_restaurant': 'Sushi XL',
+      'delivery_route_you': 'Вы',
+      'order_summary_empty': 'Детали заказа появятся здесь через мгновение.',
+      'order_bonus_title': 'Получите 10% скидку на следующий заказ',
+      'order_bonus_subtitle':
+          'Оцените доставку после получения и откройте бонус для следующего вечера с суши.',
+      'order_item_fallback': 'Позиция',
+      'tracking_stage_confirmed_title': 'Заказ подтвержден',
+      'tracking_stage_confirmed_subtitle':
+          'Мы получили ваш заказ и сразу отправили его на кухню.',
+      'tracking_stage_cooking_title': 'Повара готовят ваш суши-заказ',
+      'tracking_stage_cooking_subtitle':
+          'Свежие ингредиенты уже готовятся к отправке.',
+      'tracking_stage_on_the_way_title': 'Курьер уже в пути',
+      'tracking_stage_on_the_way_subtitle':
+          'Заказ покинул ресторан и направляется к вам.',
+      'tracking_stage_delivered_title': 'Заказ доставлен',
+      'tracking_stage_delivered_subtitle':
+          'Приятного аппетита и ждём вас снова в Sushi XL.',
       'profile_edit_title': 'Редактировать профиль',
       'save': 'Сохранить',
       'cat_drinks': 'Напитки',
@@ -623,6 +689,9 @@ class SushiLocalizations {
       'profile_track_order': 'Buyurtmani kuzatish',
       'profile_track_order_subtitle':
           'Mazali sushi buyurtmangizni real vaqtda kuzating',
+      'request_cancellation': 'Bekor qilishni so‘rash',
+      'request_cancellation_hint':
+          'Buyurtma hali kutilayotgan yoki tayyorlanayotgan paytda bekor qilish support orqali amalga oshiriladi.',
       'profile_my_orders': 'Mening buyurtmalarim',
       'profile_my_orders_subtitle':
           'Sevimli rollaringizni tezda qayta buyurtma qiling',
@@ -677,12 +746,42 @@ class SushiLocalizations {
       'order_success_hero_subtitle':
           'Oshpazlarimiz buyurtmangizni tayyorlashni boshladi.',
       'order_success_prepared_for_you': 'Yangi tayyorlandi\nsiz uchun',
+      'estimated_delivery_title': 'Taxminiy yetkazish vaqti',
+      'eta_range_25_35': '25–35 daqiqa',
+      'eta_range_15_25': '15–25 daqiqa',
+      'eta_range_5_15': '5–15 daqiqa',
+      'eta_arrived': 'Yetib keldi',
       'estimated_arrival': 'Taxminiy yetib kelish vaqti',
       'order_id': 'Buyurtma ID',
       'track_live_order': 'Jonli kuzatish',
       'track_my_order': 'Buyurtmani kuzatish',
       'return_home': 'Bosh sahifaga qaytish',
       'back_to_menu': 'Menyuga qaytish',
+      'tracking_progress_title': 'Yetkazish jarayoni',
+      'order_stage_confirmed': 'Buyurtma tasdiqlandi',
+      'order_stage_cooking': 'Tayyorlanmoqda',
+      'order_stage_on_the_way': 'Yo‘lda',
+      'order_stage_delivered': 'Yetkazildi',
+      'delivery_route_title': 'Restorandan eshigingizgacha',
+      'delivery_route_restaurant': 'Sushi XL',
+      'delivery_route_you': 'Siz',
+      'order_summary_empty': 'Buyurtma tafsilotlari shu yerda ko‘rinadi.',
+      'order_bonus_title': 'Keyingi buyurtmangizga 10% chegirma oling',
+      'order_bonus_subtitle':
+          'Yetkazib berishdan keyin baho bering va keyingi sushi oqshomingiz uchun bonusni oching.',
+      'order_item_fallback': 'Mahsulot',
+      'tracking_stage_confirmed_title': 'Buyurtma tasdiqlandi',
+      'tracking_stage_confirmed_subtitle':
+          'Buyurtmangiz qabul qilindi va darhol oshxonaga yuborildi.',
+      'tracking_stage_cooking_title': 'Oshpazlar sushingizni tayyorlamoqda',
+      'tracking_stage_cooking_subtitle':
+          'Yangi ingredientlar ayni paytda yetkazib berish uchun tayyorlanmoqda.',
+      'tracking_stage_on_the_way_title': 'Kuryer yo‘lda',
+      'tracking_stage_on_the_way_subtitle':
+          'Buyurtmangiz restorandan chiqdi va siz tomonga kelmoqda.',
+      'tracking_stage_delivered_title': 'Buyurtma yetkazildi',
+      'tracking_stage_delivered_subtitle':
+          'Yoqimli ishtaha va keyingi Sushi XL buyurtmangizda yana kutamiz.',
       'profile_edit_title': 'Profilni tahrirlash',
       'save': 'Saqlash',
       'cat_drinks': 'Ichimliklar',

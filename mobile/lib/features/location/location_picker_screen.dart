@@ -59,6 +59,7 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
   bool _resolving = false;
   bool _locating = false;
   bool _permissionDeniedForever = false;
+  bool _needsPinRefinement = false;
 
   String _placeName = '';
   String _formattedAddress = '';
@@ -145,6 +146,74 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
     return short;
   }
 
+  bool _hasHouseNumber(String value) {
+    return RegExp(
+      r'\b\d+[A-Za-zА-Яа-я]?\b',
+      caseSensitive: false,
+    ).hasMatch(value);
+  }
+
+  bool _isAdministrativeKind(String kind) {
+    switch (kind.trim().toLowerCase()) {
+      case 'country':
+      case 'province':
+      case 'area':
+      case 'locality':
+      case 'district':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool _isPreciseSearchResult(ProxyPlace place) {
+    final kind = place.kind.trim().toLowerCase();
+    final precision = place.precision.trim().toLowerCase();
+    final combined = '${place.placeName}, ${place.formattedAddress}';
+    if (kind == 'house') return true;
+    if (precision == 'exact' || precision == 'number') return true;
+    if (_hasHouseNumber(combined)) return true;
+    if (kind == 'street' &&
+        !_isGenericPlaceLabel(place.placeName) &&
+        !_isGenericPlaceLabel(place.formattedAddress)) {
+      return true;
+    }
+    return false;
+  }
+
+  int _searchResultScore(ProxyPlace place) {
+    final kind = place.kind.trim().toLowerCase();
+    final precision = place.precision.trim().toLowerCase();
+    final combined = '${place.placeName}, ${place.formattedAddress}';
+    var score = 0;
+    if (_isPreciseSearchResult(place)) score += 1000;
+    if (kind == 'house') score += 500;
+    if (kind == 'street') score += 250;
+    if (_hasHouseNumber(combined)) score += 180;
+    if (precision == 'exact' || precision == 'number') score += 160;
+    if (precision == 'near' || precision == 'street') score += 80;
+    if (_isAdministrativeKind(kind)) score -= 500;
+    if (_isGenericPlaceLabel(place.placeName) ||
+        _isGenericPlaceLabel(place.formattedAddress)) {
+      score -= 220;
+    }
+    return score;
+  }
+
+  List<ProxyPlace> _rankSearchResults(List<ProxyPlace> places) {
+    final ranked = places.toList();
+    ranked
+        .sort((a, b) => _searchResultScore(b).compareTo(_searchResultScore(a)));
+    return ranked;
+  }
+
+  ProxyPlace? _bestAutoSelection(List<ProxyPlace> places) {
+    for (final place in places) {
+      if (_isPreciseSearchResult(place)) return place;
+    }
+    return null;
+  }
+
   void _scheduleSearch(String value) {
     _debounce?.cancel();
     final query = value.trim();
@@ -162,24 +231,56 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
     });
   }
 
-  Future<void> _performSearch(String query, int token) async {
+  String _proxyLang() {
+    final code = Localizations.localeOf(context).languageCode.toLowerCase();
+    switch (code) {
+      case 'uz':
+        return 'uz_UZ';
+      case 'en':
+        return 'en_US';
+      default:
+        return 'ru_RU';
+    }
+  }
+
+  Future<void> _performSearch(
+    String query,
+    int token, {
+    bool autoSelectTop = false,
+    bool showNoResults = false,
+  }) async {
     if (!mounted) return;
     setState(() => _searching = true);
     try {
       final results = await _proxyGeocoder.geocode(
         text: query,
-        lang: 'ru_RU',
+        lang: _proxyLang(),
         results: 5,
       );
       if (!mounted || token != _searchToken) return;
+      final limited = _rankSearchResults(results).take(5).toList();
       setState(() {
         _suggestions
           ..clear()
-          ..addAll(results.take(5));
+          ..addAll(limited);
       });
+      if (limited.isNotEmpty && autoSelectTop) {
+        final selected = _bestAutoSelection(limited);
+        if (selected != null) {
+          _applyPlace(selected);
+        } else {
+          _applyPlace(limited.first, requirePinRefinement: true);
+          _showSnack('Укажите улицу и дом или поставьте точку дома на карте');
+        }
+      } else if (limited.isEmpty && showNoResults) {
+        _showSnack('Адрес не найден');
+      }
     } catch (_) {
       if (!mounted || token != _searchToken) return;
       setState(() => _suggestions.clear());
+      if (showNoResults) {
+        _showSnack('Адрес не найден');
+      }
     } finally {
       if (mounted && token == _searchToken) {
         setState(() => _searching = false);
@@ -187,7 +288,25 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
     }
   }
 
-  void _applyPlace(ProxyPlace place, {bool markAsUser = false}) {
+  void _runManualSearch() {
+    final query = _searchController.text.trim();
+    final token = ++_searchToken;
+    _debounce?.cancel();
+    unawaited(
+      _performSearch(
+        query,
+        token,
+        autoSelectTop: true,
+        showNoResults: true,
+      ),
+    );
+  }
+
+  void _applyPlace(
+    ProxyPlace place, {
+    bool markAsUser = false,
+    bool requirePinRefinement = false,
+  }) {
     setState(() {
       _mapLat = place.lat;
       _mapLon = place.lon;
@@ -195,10 +314,12 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
       _placeName = _bestPlaceLabel(
           place.placeName.trim(), place.formattedAddress.trim());
       _formattedAddress = place.formattedAddress.trim();
+      _needsPinRefinement = requirePinRefinement;
       _suggestions.clear();
       if (markAsUser) {
         _userLat = place.lat;
         _userLon = place.lon;
+        _needsPinRefinement = false;
       }
     });
     _searchController.text =
@@ -217,7 +338,7 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
       final place = await _proxyGeocoder.reverse(
         lat: lat,
         lon: lon,
-        lang: 'ru_RU',
+        lang: _proxyLang(),
       );
       if (!mounted || place == null) return;
       _applyPlace(place, markAsUser: markAsUser);
@@ -229,7 +350,11 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
   Future<void> _selectSuggestion(ProxyPlace place) async {
     _searchToken++;
     _debounce?.cancel();
-    _applyPlace(place);
+    final needsRefinement = !_isPreciseSearchResult(place);
+    _applyPlace(place, requirePinRefinement: needsRefinement);
+    if (needsRefinement) {
+      _showSnack('Укажите улицу и дом или поставьте точку дома на карте');
+    }
   }
 
   Future<void> _onMapTap(double lat, double lon) async {
@@ -238,6 +363,7 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
       _mapLat = lat;
       _mapLon = lon;
       _mapZoom = _selectedZoom;
+      _needsPinRefinement = false;
       _suggestions.clear();
     });
     await _reverseAndSelect(lat, lon);
@@ -325,6 +451,7 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
       _mapZoom = _defaultZoom;
       _userLat = null;
       _userLon = null;
+      _needsPinRefinement = false;
       _placeName = '';
       _formattedAddress = '';
       _suggestions.clear();
@@ -398,7 +525,7 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
       final place = await _proxyGeocoder.reverse(
         lat: position.latitude,
         lon: position.longitude,
-        lang: 'ru_RU',
+        lang: _proxyLang(),
       );
       if (place == null) {
         _fallbackToTashkent();
@@ -422,6 +549,10 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
     final address = _formattedAddress.trim();
     if (address.isEmpty) {
       _showSnack('Выберите адрес доставки');
+      return;
+    }
+    if (_needsPinRefinement) {
+      _showSnack('Укажите дом точкой на карте или добавьте улицу и номер дома');
       return;
     }
 
@@ -464,224 +595,220 @@ class _DeliveryAddressPageState extends ConsumerState<DeliveryAddressPage> {
             subtitle: _formattedAddress.trim(),
           );
 
-    return GestureDetector(
-      onTap: () => _searchFocusNode.unfocus(),
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: const Text('Адрес доставки'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new),
-            onPressed: () => context.pop(),
-          ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Адрес доставки'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => context.pop(),
         ),
-        body: SafeArea(
-          top: false,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              const horizontalPadding = 16.0;
-              const topPadding = 12.0;
-              const searchHeight = 56.0;
-              const overlayGap = 8.0;
-              const mapTop = topPadding + searchHeight + 12.0;
+      ),
+      body: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const horizontalPadding = 16.0;
+            const topPadding = 12.0;
+            const searchHeight = 56.0;
+            const overlayGap = 8.0;
+            const mapTop = topPadding + searchHeight + 12.0;
 
-              return Stack(
-                children: [
-                  Positioned.fill(
-                    top: mapTop,
-                    child: YandexMapView(
-                      lat: _mapLat,
-                      lng: _mapLon,
-                      zoom: _mapZoom,
-                      selectable: true,
-                      markers: marker == null ? const [] : [marker],
-                      userMarker: (_userLat != null && _userLon != null)
-                          ? YandexMapMarker(
-                              _userLat!,
-                              _userLon!,
-                              title: 'Мое местоположение',
-                            )
-                          : null,
-                      onTap: _onMapTap,
-                    ),
+            return Stack(
+              children: [
+                Positioned.fill(
+                  top: mapTop,
+                  child: YandexMapView(
+                    lat: _mapLat,
+                    lng: _mapLon,
+                    zoom: _mapZoom,
+                    selectable: true,
+                    markers: marker == null ? const [] : [marker],
+                    userMarker: (_userLat != null && _userLon != null)
+                        ? YandexMapMarker(
+                            _userLat!,
+                            _userLon!,
+                            title: 'Мое местоположение',
+                          )
+                        : null,
+                    onTap: _onMapTap,
                   ),
-                  Positioned(
-                    top: topPadding,
-                    left: horizontalPadding,
-                    right: horizontalPadding,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                ),
+                Positioned(
+                  top: topPadding,
+                  left: horizontalPadding,
+                  right: horizontalPadding,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Material(
+                        elevation: 10,
+                        shadowColor: const Color(0x22000000),
+                        borderRadius: BorderRadius.circular(16),
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          textInputAction: TextInputAction.search,
+                          onTapOutside: (_) => _searchFocusNode.unfocus(),
+                          onChanged: _scheduleSearch,
+                          onSubmitted: (_) => _runManualSearch(),
+                          decoration: InputDecoration(
+                            hintText: 'Поиск адреса',
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 16,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                            suffixIcon: _searching
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.search),
+                                    onPressed: _runManualSearch,
+                                  ),
+                          ),
+                        ),
+                      ),
+                      if (_suggestions.isNotEmpty) ...[
+                        const SizedBox(height: overlayGap),
                         Material(
                           elevation: 10,
                           shadowColor: const Color(0x22000000),
                           borderRadius: BorderRadius.circular(16),
-                          child: TextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            textInputAction: TextInputAction.search,
-                            onChanged: _scheduleSearch,
-                            onSubmitted: (value) {
-                              _searchToken++;
-                              _debounce?.cancel();
-                              unawaited(
-                                  _performSearch(value.trim(), _searchToken));
-                            },
-                            decoration: InputDecoration(
-                              hintText: 'Поиск адреса',
-                              filled: true,
-                              fillColor: Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 300),
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              padding: EdgeInsets.zero,
+                              itemCount: _suggestions.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final place = _suggestions[index];
+                                return ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.place_outlined,
+                                      size: 18),
+                                  title: Text(
+                                    place.placeName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  subtitle: Text(
+                                    place.formattedAddress,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black.withOpacity(0.55),
+                                    ),
+                                  ),
+                                  onTap: () => _selectSuggestion(place),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Positioned(
+                  right: 16,
+                  top: mapTop + 16,
+                  child: _MapZoomControls(
+                    onZoomIn: _zoomInMap,
+                    onZoomOut: _zoomOutMap,
+                  ),
+                ),
+                Positioned(
+                  right: 16,
+                  bottom: 24,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (_permissionDeniedForever)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x22000000),
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide.none,
-                              ),
-                              suffixIcon: _searching
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(16),
-                                      child: SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      ),
+                            ],
+                          ),
+                          child: TextButton(
+                            onPressed: openAppSettings,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text('Open Settings'),
+                          ),
+                        ),
+                      Material(
+                        color: Colors.white,
+                        elevation: 8,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _locating ? null : _useCurrentLocation,
+                          child: SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: Center(
+                              child: _locating || _resolving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
                                     )
-                                  : const Icon(Icons.search),
+                                  : const Icon(Icons.my_location, size: 22),
                             ),
                           ),
                         ),
-                        if (_suggestions.isNotEmpty) ...[
-                          const SizedBox(height: overlayGap),
-                          Material(
-                            elevation: 10,
-                            shadowColor: const Color(0x22000000),
-                            borderRadius: BorderRadius.circular(16),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 300),
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                padding: EdgeInsets.zero,
-                                itemCount: _suggestions.length,
-                                separatorBuilder: (_, __) =>
-                                    const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final place = _suggestions[index];
-                                  return ListTile(
-                                    dense: true,
-                                    leading: const Icon(Icons.place_outlined,
-                                        size: 18),
-                                    title: Text(
-                                      place.placeName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700),
-                                    ),
-                                    subtitle: Text(
-                                      place.formattedAddress,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black.withOpacity(0.55),
-                                      ),
-                                    ),
-                                    onTap: () => _selectSuggestion(place),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Positioned(
-                    right: 16,
-                    top: mapTop + 16,
-                    child: _MapZoomControls(
-                      onZoomIn: _zoomInMap,
-                      onZoomOut: _zoomOutMap,
-                    ),
-                  ),
-                  Positioned(
-                    right: 16,
-                    bottom: 24,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (_permissionDeniedForever)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x22000000),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: TextButton(
-                              onPressed: openAppSettings,
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: const Text('Open Settings'),
-                            ),
-                          ),
-                        Material(
-                          color: Colors.white,
-                          elevation: 8,
-                          shape: const CircleBorder(),
-                          child: InkWell(
-                            customBorder: const CircleBorder(),
-                            onTap: _locating ? null : _useCurrentLocation,
-                            child: SizedBox(
-                              width: 52,
-                              height: 52,
-                              child: Center(
-                                child: _locating || _resolving
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.my_location, size: 22),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                ),
+              ],
+            );
+          },
         ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _save,
-              child: const Text('Сохранить адрес'),
-            ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: SizedBox(
+          height: 52,
+          child: ElevatedButton(
+            onPressed: _save,
+            child: const Text('Сохранить адрес'),
           ),
         ),
       ),

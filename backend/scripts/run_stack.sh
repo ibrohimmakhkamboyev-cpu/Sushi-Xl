@@ -129,7 +129,7 @@ pip install -r backend/catalog_backend/requirements.txt >/dev/null
 nohup backend/.venv/bin/python backend/catalog_backend/main.py > backend/backend_catalog.log 2>&1 < /dev/null &
 BACKEND_PID=$!
 
-nohup backend/.venv/bin/python -m http.server "$ADMIN_PORT" --directory frontend/admin-panel > frontend/admin_panel.log 2>&1 < /dev/null &
+nohup backend/.venv/bin/python -m http.server "$ADMIN_PORT" --bind 127.0.0.1 --directory frontend/admin-panel > frontend/admin_panel.log 2>&1 < /dev/null &
 ADMIN_PID=$!
 
 echo "Backend PID: $BACKEND_PID"

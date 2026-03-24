@@ -2,6 +2,7 @@ import { api } from '../services/api.js';
 import { escapeHtml, formatMoney, normalizeString } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
 import { statusBadge } from '../components/badge.js';
+import { renderMetricGrid, renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 const ADMIN_FETCH_LIMIT = 200;
 
@@ -38,6 +39,13 @@ function firstText(...values) {
     if (text) return text;
   }
   return '';
+}
+
+function normalizeOptionalPositiveNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
 }
 
 function toPayload(form, current = null, uiLang = 'en') {
@@ -93,7 +101,7 @@ function toPayload(form, current = null, uiLang = 'en') {
     imageUrl: current?.imageUrl || null,
     categoryId: Number(form.categoryId),
     price: Number(form.price),
-    oldPrice: form.oldPrice === null || form.oldPrice === '' ? null : Number(form.oldPrice),
+    oldPrice: normalizeOptionalPositiveNumber(form.oldPrice),
     discountStartAt: (form.discountStartAt || '').trim() || null,
     discountEndAt: (form.discountEndAt || '').trim() || null,
     sortOrder: Number(form.sortOrder || 0),
@@ -326,6 +334,45 @@ export async function renderProducts(ctx) {
       return searchOk && categoryOk;
     });
 
+    const activeCount = state.products.filter((item) => item.isActive).length;
+    const discountedCount = state.products.filter((item) => Number(item.oldPrice || 0) > Number(item.price || 0)).length;
+    const featuredCount = state.products.filter((item) => item.isRecommended || item.isPopular || item.isNew).length;
+
+    container.innerHTML = `
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Catalog management', 'Управление каталогом', 'Katalog boshqaruvi'),
+        title: tr(uiLang, 'Products and availability', 'Товары и доступность', 'Mahsulotlar va mavjudlik'),
+        description: tr(uiLang, 'Manage the Sushi XL product catalog, pricing, category assignment, discount timing, and product imagery from one premium control surface.', 'Управляйте каталогом Sushi XL, ценами, привязкой к категориям, временем скидок и изображениями из одной панели.', 'Sushi XL katalogi, narxlar, kategoriyaga biriktirish, chegirma vaqt oralig‘i va rasmlarni bitta boshqaruv yuzasidan boshqaring.'),
+        meta: [
+          { label: tr(uiLang, 'Source', 'Источник', 'Manba'), value: state.source || 'database' },
+          { label: tr(uiLang, 'Write access', 'Доступ на запись', 'Yozish huquqi'), value: state.readOnly ? tr(uiLang, 'Read only', 'Только чтение', 'Faqat o‘qish') : tr(uiLang, 'Writable', 'Доступно', 'Yozish mumkin') },
+        ],
+      })}
+      ${renderMetricGrid([
+        { label: t('products'), value: String(state.products.length), tone: 'accent', helper: tr(uiLang, 'Products in current source', 'Товары в текущем источнике', 'Joriy manbadagi mahsulotlar') },
+        { label: t('active'), value: String(activeCount), tone: 'success', helper: tr(uiLang, 'Available to customers', 'Доступно клиентам', 'Mijozlar uchun ochiq') },
+        { label: t('discounts'), value: String(discountedCount), tone: 'warning', helper: tr(uiLang, 'Items with price drops', 'Позиции со скидкой', 'Narxi tushirilganlar') },
+        { label: t('flags'), value: String(featuredCount), helper: tr(uiLang, 'Recommended, popular, or new', 'Рекомендуемые, популярные или новые', 'Tavsiya etilgan, ommabop yoki yangi') },
+      ])}
+      ${renderSectionCard({
+        title: t('products_management'),
+        description: tr(uiLang, 'Search, filter, reorder, and maintain media-rich menu items while preserving current backend write rules.', 'Ищите, фильтруйте, сортируйте и поддерживайте товары с медиа, сохраняя текущие правила записи бэкенда.', 'Qidiring, filtrlang, qayta tartiblang va media boy menyu elementlarini joriy backend yozish qoidalarini saqlagan holda boshqaring.'),
+        actions: state.readOnly
+          ? statusBadge('warning', t('source_read_only').replace('{source}', state.source))
+          : `<button class="btn btn-primary" id="add-product">${escapeHtml(t('add_product'))}</button>`,
+        body: `
+          <div class="toolbar">
+            <input id="products-search" placeholder="${escapeHtml(t('search_products'))}" value="${escapeHtml(state.search)}" />
+            <select id="products-category-filter">
+              <option value="">${escapeHtml(t('all_categories'))}</option>
+              ${state.categories.map((cat) => `<option value="${cat.id}" ${String(cat.id) === String(state.categoryId) ? 'selected' : ''}>${escapeHtml(pickLocalized(cat, 'name', uiLang))}</option>`).join('')}
+            </select>
+          </div>
+          <div id="products-table"></div>
+        `,
+      })}
+    `;
+
     const tableNode = container.querySelector('#products-table');
     const columns = [
       { key: 'id', label: t('id'), sortable: true },
@@ -336,7 +383,7 @@ export async function renderProducts(ctx) {
         render: (row) => {
           const imageUrl = (row.imageUrl || '').trim();
           if (!imageUrl) return '-';
-          return `<img src="${escapeHtml(imageUrl)}" alt="product" style="width:42px;height:42px;border-radius:8px;object-fit:cover" />`;
+          return `<img src="${escapeHtml(imageUrl)}" alt="product" style="width:52px;height:52px;border-radius:16px;object-fit:cover" />`;
         },
       },
       { key: 'title', label: t('title'), sortable: true, render: (row) => escapeHtml(pickLocalized(row, 'title', uiLang)) },
@@ -396,6 +443,7 @@ export async function renderProducts(ctx) {
           drawTable();
         },
         emptyText: t('no_data'),
+        minWidth: '1180px',
       });
 
       if (state.readOnly) return;
@@ -422,9 +470,13 @@ export async function renderProducts(ctx) {
             const payload = toPayload(current, current, uiLang);
             payload.isActive = !current.isActive;
             const updated = await api.updateProduct(token, id, payload);
-            state.products = state.products.map((item) => (item.id === id ? updated : item));
+            state.products = state.products.map((item) => (
+              item.id === id
+                ? { ...item, ...updated, isActive: payload.isActive }
+                : item
+            ));
             showToast(`${t('products')} ${t('updated')}`, 'success');
-            await render(false);
+            await render(true);
           } catch (error) {
             showToast(`${t('toggle_failed')}: ${error.message}`, 'error');
           }

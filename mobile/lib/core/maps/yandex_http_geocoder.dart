@@ -33,6 +33,7 @@ class YandexHttpGeocoder {
     String query, {
     int maxResults = 8,
     bool restrictToUzbekistan = false,
+    String lang = 'ru_RU',
   }) async {
     final normalized = query.trim();
     if (normalized.isEmpty) return const [];
@@ -40,6 +41,7 @@ class YandexHttpGeocoder {
       geocode: normalized,
       maxResults: maxResults,
       restrictToUzbekistan: restrictToUzbekistan,
+      lang: lang,
     );
   }
 
@@ -47,11 +49,13 @@ class YandexHttpGeocoder {
     double lat,
     double lng, {
     int maxResults = 5,
+    String lang = 'ru_RU',
   }) async {
     return _request(
       geocode: '$lng,$lat',
       maxResults: maxResults,
       restrictToUzbekistan: false,
+      lang: lang,
     );
   }
 
@@ -59,6 +63,7 @@ class YandexHttpGeocoder {
     required String geocode,
     required int maxResults,
     required bool restrictToUzbekistan,
+    required String lang,
   }) async {
     final key = yandexGeocoderApiKey.trim();
     if (key.isEmpty) return const [];
@@ -70,7 +75,7 @@ class YandexHttpGeocoder {
           'geocode': geocode,
           'format': 'json',
           'results': maxResults,
-          'lang': 'ru_RU',
+          'lang': lang,
           if (restrictToUzbekistan) 'bbox': '55.8,36.8~73.5,45.8',
           if (restrictToUzbekistan) 'rspn': 1,
         },

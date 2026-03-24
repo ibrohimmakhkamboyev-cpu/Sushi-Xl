@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/state/providers.dart';
+import '../../core/widgets/remote_image_box.dart';
 import '../../data/models/menu_models.dart';
 import '../../core/format/currency.dart';
 import '../../core/localization/sushi_localizations.dart';
@@ -223,17 +224,12 @@ class _ProductCard extends ConsumerWidget {
         children: [
           Stack(
             children: [
-              Container(
+              RemoteImageBox(
+                imageUrl: image,
                 height: 170,
-                decoration: BoxDecoration(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(18)),
-                  image: image == null || image.isEmpty
-                      ? null
-                      : DecorationImage(
-                          image: NetworkImage(image), fit: BoxFit.cover),
-                  color: Colors.black12,
-                ),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(18)),
+                backgroundColor: Colors.black12,
               ),
               Positioned(
                 right: 12,

@@ -1115,7 +1115,7 @@ def _map_dash_transaction_to_app_status(
         if transaction_status in {8, 9, 10}:
             return 'cancelled'
         if transaction_status == 1:
-            return 'preparing'
+            return 'accepted'
         if transaction_status == 0:
             return 'pending'
 
@@ -1183,10 +1183,19 @@ def _to_absolute_media_url(base_url: str, raw_path: str) -> str:
     if not path:
         return ''
     if path.startswith('http://') or path.startswith('https://'):
-        return path
+        return _normalize_media_url(path)
     if path.startswith('/'):
-        return f'{base_url}{path}'
-    return f'{base_url}/{path}'
+        return _normalize_media_url(f'{base_url}{path}')
+    return _normalize_media_url(f'{base_url}/{path}')
+
+
+def _normalize_media_url(url: str) -> str:
+    return re.sub(
+        r'(?:_original){2,}(?=\.[A-Za-z0-9]+(?:[?#].*)?$)',
+        '_original',
+        url.strip(),
+        flags=re.IGNORECASE,
+    )
 
 
 def _transaction_lookup_window(created_at: Optional[str]) -> Tuple[str, str]:

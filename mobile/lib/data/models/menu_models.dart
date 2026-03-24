@@ -1,3 +1,5 @@
+import '../../core/format/image_url.dart';
+
 class ModifierModel {
   final int id;
   final String name;
@@ -104,7 +106,9 @@ class ProductModel {
       price: (json['price'] as num?)?.toDouble(),
       oldPrice: (json['oldPrice'] as num?)?.toDouble() ??
           (json['old_price'] as num?)?.toDouble(),
-      imageUrl: json['imageUrl'] as String? ?? json['image_url'] as String?,
+      imageUrl: normalizeRemoteImageUrl(
+        json['imageUrl'] as String? ?? json['image_url'] as String?,
+      ),
       categoryId: json['categoryId'] as int? ?? json['category_id'] as int?,
       categoryName:
           json['categoryName'] as String? ?? json['category_name'] as String?,

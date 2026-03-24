@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/localization/sushi_localizations.dart';
+import '../../core/orders/order_status.dart';
 import '../../core/state/providers.dart';
 import '../../data/models/cart_models.dart';
 import '../../data/models/menu_models.dart';
@@ -218,11 +219,7 @@ class _OrderHistoryScreenState extends ConsumerState<OrderHistoryScreen> {
   }
 
   bool _isActive(OrderHistoryItem item) {
-    final status = item.status.toLowerCase();
-    return !(status.contains('deliver') ||
-        status.contains('cancel') ||
-        status.contains('complete') ||
-        status.contains('done'));
+    return !isTerminalOrderStatus(item.status);
   }
 
   bool _isPast(OrderHistoryItem item) => !_isActive(item);
@@ -965,6 +962,25 @@ class _LiveOrderCard extends StatelessWidget {
                 _ProgressLabel(t.t('status_delivered')),
               ],
             ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: _OrderActionButton(
+                label: t.t('request_cancellation'),
+                filled: true,
+                onTap: () =>
+                    context.push('/support/chat?cancelOrderId=${order.id}'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              t.t('request_cancellation_hint'),
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF8C7A75),
+                height: 1.35,
+              ),
+            ),
           ],
         ),
       ),
@@ -972,47 +988,11 @@ class _LiveOrderCard extends StatelessWidget {
   }
 
   String _statusLabel(String raw) {
-    final value = raw.toLowerCase();
-    if (value.contains('cancel')) return 'status_cancelled';
-    if (value.contains('deliver') ||
-        value.contains('complete') ||
-        value.contains('done')) {
-      return 'status_delivered';
-    }
-    if (value.contains('way') || value.contains('courier')) {
-      return 'status_on_the_way';
-    }
-    if (value.contains('prepar') || value.contains('cook')) {
-      return 'status_preparing';
-    }
-    if (value.contains('pending') ||
-        value.contains('sent') ||
-        value.contains('accept') ||
-        value.contains('new')) {
-      return 'status_preparing';
-    }
-    return 'status_preparing';
+    return orderStatusLabelKey(raw);
   }
 
   int _statusStep(String raw) {
-    final value = raw.toLowerCase();
-    if (value.contains('deliver') ||
-        value.contains('complete') ||
-        value.contains('done')) {
-      return 3;
-    }
-    if (value.contains('way') || value.contains('courier')) return 2;
-    if (value.contains('prepar') || value.contains('cook')) return 1;
-    if (value.contains('pending') ||
-        value.contains('sent') ||
-        value.contains('accept') ||
-        value.contains('new')) {
-      return 1;
-    }
-    if (value.contains('cancel')) {
-      return 0;
-    }
-    return 1;
+    return activeOrderTimelineStep(raw);
   }
 
   String _formatDate(String raw) {
@@ -1074,6 +1054,59 @@ class _ProgressLabel extends StatelessWidget {
           color: Color(0xFF7B6A66),
         ),
       ),
+    );
+  }
+}
+
+class _OrderActionButton extends StatelessWidget {
+  const _OrderActionButton({
+    required this.label,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = SizedBox(
+      height: 44,
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: filled ? Colors.white : const Color(0xFF231815),
+          ),
+        ),
+      ),
+    );
+    if (filled) {
+      return ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          backgroundColor: const Color(0xFFEE482B),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: child,
+      );
+    }
+    return OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Color(0xFFE7D9D5)),
+        backgroundColor: const Color(0xFFFFFBFA),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      child: child,
     );
   }
 }
@@ -1176,13 +1209,9 @@ class _PastOrderCard extends StatelessWidget {
   }
 
   String _pastStatus(String raw) {
-    final value = raw.toLowerCase();
-    if (value.contains('cancel')) return 'status_cancelled';
-    if (value.contains('deliver') ||
-        value.contains('complete') ||
-        value.contains('done')) {
-      return 'status_delivered';
-    }
+    final normalized = canonicalOrderStatus(raw);
+    if (normalized == 'cancelled') return 'status_cancelled';
+    if (normalized == 'delivered') return 'status_delivered';
     return 'status_completed';
   }
 

@@ -1,6 +1,7 @@
 import { api } from '../services/api.js';
 import { escapeHtml, formatDate, formatMoney } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
+import { renderMetricGrid, renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 const ADMIN_FETCH_LIMIT = 200;
 
@@ -41,7 +42,7 @@ function userForm(openFormModal, t, initial = null) {
 }
 
 export async function renderUsers(ctx) {
-  const { container, token, openFormModal, openConfirmModal, showToast, t = (key) => key } = ctx;
+  const { container, token, openFormModal, openConfirmModal, showToast, uiLang = 'en', t = (key) => key } = ctx;
   const state = { search: '', rows: [], sortKey: 'id', sortDir: 'desc' };
 
   const load = async () => {
@@ -50,20 +51,6 @@ export async function renderUsers(ctx) {
   };
 
   const render = async () => {
-    container.innerHTML = `
-      <section class="panel">
-        <div class="panel-head split">
-          <h2>${escapeHtml(t('users_customers'))}</h2>
-          <div class="toolbar">
-            <input id="users-search" placeholder="${escapeHtml(t('search_users'))}" value="${escapeHtml(state.search)}" />
-            <button class="btn btn-primary" id="users-add">${escapeHtml(t('create'))}</button>
-            <button class="btn btn-muted" id="users-refresh">${escapeHtml(t('refresh'))}</button>
-          </div>
-        </div>
-        <div id="users-table"></div>
-      </section>
-    `;
-
     try {
       await load();
     } catch (error) {
@@ -71,7 +58,8 @@ export async function renderUsers(ctx) {
       return;
     }
 
-    const tableRoot = container.querySelector('#users-table');
+    const totalSpent = state.rows.reduce((sum, row) => sum + Number(row.total_spent || 0), 0);
+
     const columns = [
       { key: 'id', label: t('id'), sortable: true },
       { key: 'full_name', label: t('name'), sortable: true },
@@ -93,6 +81,34 @@ export async function renderUsers(ctx) {
       },
     ];
 
+    container.innerHTML = `
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Customer base', 'Клиентская база', 'Mijozlar bazasi'),
+        title: tr(uiLang, 'Users and spending overview', 'Пользователи и траты', 'Foydalanuvchilar va sarf ko‘rinishi'),
+        description: tr(uiLang, 'Review customer profiles, order activity, preferred language, and total spend while keeping full CRUD controls available.', 'Просматривайте профили клиентов, активность заказов, предпочитаемый язык и общий чек, сохраняя полный CRUD.', 'Mijoz profillari, buyurtma faolligi, afzal til va jami sarfni to‘liq CRUD bilan ko‘rib chiqing.'),
+      })}
+      ${renderMetricGrid([
+        { label: t('users'), value: String(state.rows.length), tone: 'accent', helper: tr(uiLang, 'Matched by current search', 'Найдено по текущему поиску', 'Joriy qidiruv bo‘yicha topildi') },
+        { label: t('spent'), value: formatMoney(totalSpent), tone: 'success', helper: tr(uiLang, 'Aggregate spend in view', 'Суммарные траты в текущем списке', 'Joriy ro‘yxatdagi jami sarf') },
+      ])}
+      ${renderSectionCard({
+        title: t('users_customers'),
+        description: tr(uiLang, 'Search and maintain customer records with fast access to phone, language, order count, and spend.', 'Ищите и поддерживайте клиентские записи с быстрым доступом к телефону, языку, числу заказов и тратам.', 'Telefon, til, buyurtmalar soni va sarf bo‘yicha tezkor kirish bilan mijoz yozuvlarini qidiring va boshqaring.'),
+        actions: `
+          <button class="btn btn-primary" id="users-add">${escapeHtml(t('create'))}</button>
+          <button class="btn btn-muted" id="users-refresh">${escapeHtml(t('refresh'))}</button>
+        `,
+        body: `
+          <div class="toolbar">
+            <input id="users-search" placeholder="${escapeHtml(t('search_users'))}" value="${escapeHtml(state.search)}" />
+          </div>
+          <div id="users-table"></div>
+        `,
+      })}
+    `;
+
+    const tableRoot = container.querySelector('#users-table');
+
     const draw = () => {
       renderTable({
         container: tableRoot,
@@ -105,6 +121,7 @@ export async function renderUsers(ctx) {
           draw();
         },
         emptyText: t('no_data'),
+        minWidth: '1040px',
       });
 
       tableRoot.querySelectorAll('[data-action="edit"]').forEach((btn) => {

@@ -1,18 +1,23 @@
 import { api } from '../services/api.js';
 import { escapeHtml } from '../models/serializers.js';
 import { setAdminProfile, getAdminProfile } from '../services/auth.js';
+import { renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 export async function renderProfile(ctx) {
-  const { container, token, showToast, refreshApp, t = (key) => key } = ctx;
+  const { container, token, showToast, refreshApp, uiLang = 'en', t = (key) => key } = ctx;
   container.innerHTML = `<div class="page-state loading">${escapeHtml(t('loading_profile'))}</div>`;
 
   try {
     const profile = await api.getProfile(token);
     container.innerHTML = `
-      <section class="panel form-panel">
-        <div class="panel-head">
-          <h2>${escapeHtml(t('profile_title'))}</h2>
-        </div>
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Administrator account', 'Аккаунт администратора', 'Administrator hisobi'),
+        title: tr(uiLang, 'Profile and access', 'Профиль и доступ', 'Profil va kirish'),
+        description: tr(uiLang, 'Update the administrator identity shown across the suite and rotate the password without changing the underlying auth flow.', 'Обновляйте личность администратора, видимую по всей системе, и меняйте пароль без изменения базового auth-потока.', 'Butun panel bo‘ylab ko‘rinadigan administrator ma’lumotlarini yangilang va asosiy autentifikatsiya oqimini o‘zgartirmasdan parolni almashtiring.') })}
+      ${renderSectionCard({
+        title: t('profile_title'),
+        description: tr(uiLang, 'Security-sensitive fields are kept minimal and aligned with the existing backend profile endpoint.', 'Чувствительные поля сведены к минимуму и соответствуют существующему profile endpoint бэкенда.', 'Xavfsizlikka sezgir maydonlar minimal holatda bo‘lib, mavjud backend profile endpointiga mos keladi.'),
+        body: `
         <form id="profile-form" class="inline-form-grid">
           <label class="field">
             <span>${escapeHtml(t('email'))}</span>
@@ -30,7 +35,8 @@ export async function renderProfile(ctx) {
             <button type="submit" class="btn btn-primary">${escapeHtml(t('save_profile'))}</button>
           </div>
         </form>
-      </section>
+        `,
+      })}
     `;
 
     container.querySelector('#profile-form').addEventListener('submit', async (event) => {

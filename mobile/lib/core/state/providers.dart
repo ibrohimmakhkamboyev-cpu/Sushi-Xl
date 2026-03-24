@@ -1584,6 +1584,83 @@ class SupportInboxNotifier extends StateNotifier<SupportInboxState> {
     unawaited(_syncMessagesToRemote(threadId, [userMessage, replyMessage]));
   }
 
+  Future<void> sendCancellationRequest({
+    required UserSession session,
+    required int orderId,
+    String? reason,
+  }) async {
+    if (orderId <= 0) return;
+    final threadId = threadIdForSession(session);
+    final now = DateTime.now();
+    final customerName = session.fullName.trim().isEmpty
+        ? (session.phone.trim().isEmpty ? 'Guest' : session.phone.trim())
+        : session.fullName.trim();
+    final customerPhone = session.phone.trim();
+    final lang = session.preferredLang.trim().isEmpty
+        ? _ref.read(localeProvider).languageCode
+        : session.preferredLang.trim();
+    final cleanReason = (reason ?? '').trim();
+    final userText = _cancellationRequestUserText(
+      orderId: orderId,
+      lang: lang,
+      reason: cleanReason.isEmpty ? null : cleanReason,
+    );
+    final replyTime = DateTime.now();
+    final replyText = _cancellationRequestReplyText(
+      orderId: orderId,
+      lang: lang,
+    );
+    final currentThread = _threadById(threadId);
+    final userMessage = SupportChatMessage(
+      id: '${now.microsecondsSinceEpoch}_user_cancel_request',
+      threadId: threadId,
+      text: userText,
+      sender: 'user',
+      senderLabel: customerName,
+      createdAtMs: now.millisecondsSinceEpoch,
+    );
+    final replyMessage = SupportChatMessage(
+      id: '${replyTime.microsecondsSinceEpoch}_bot_escalation_cancel_request',
+      threadId: threadId,
+      text: replyText,
+      sender: 'bot_escalation',
+      senderLabel: _assistantLabel(lang),
+      createdAtMs: replyTime.millisecondsSinceEpoch,
+      faqId: 'cancel_request',
+    );
+    final nextThread = (currentThread ??
+            SupportChatThread(
+              threadId: threadId,
+              customerName: customerName,
+              customerPhone: customerPhone,
+              customerLang: lang,
+              lastMessage: '',
+              lastSender: '',
+              lastCustomerMessage: '',
+              updatedAtMs: now.millisecondsSinceEpoch,
+              needsAdmin: false,
+              answeredByApp: false,
+            ))
+        .copyWith(
+      customerName: customerName,
+      customerPhone: customerPhone,
+      customerLang: lang,
+      lastMessage: replyText,
+      lastSender: 'bot_escalation',
+      lastCustomerMessage: userText,
+      updatedAtMs: replyTime.millisecondsSinceEpoch,
+      needsAdmin: true,
+      answeredByApp: false,
+    );
+
+    _upsertThread(nextThread);
+    _upsertMessages(threadId, [userMessage, replyMessage]);
+    await _persist();
+    _ensureSubscriptions([threadId]);
+    unawaited(_syncThreadToRemote(nextThread));
+    unawaited(_syncMessagesToRemote(threadId, [userMessage, replyMessage]));
+  }
+
   Future<void> sendAdminReply({
     required String threadId,
     required String adminName,
@@ -1687,6 +1764,43 @@ class SupportInboxNotifier extends StateNotifier<SupportInboxState> {
       case 'ru':
       default:
         return 'Ассистент Sushi XL';
+    }
+  }
+
+  String _cancellationRequestUserText({
+    required int orderId,
+    required String lang,
+    String? reason,
+  }) {
+    switch (lang) {
+      case 'uz':
+        return reason == null || reason.isEmpty
+            ? 'Buyurtma #$orderId ni bekor qilishni so‘rayman.'
+            : 'Buyurtma #$orderId ni bekor qilishni so‘rayman.\nSabab: $reason';
+      case 'en':
+        return reason == null || reason.isEmpty
+            ? 'Please cancel my order #$orderId.'
+            : 'Please cancel my order #$orderId.\nReason: $reason';
+      case 'ru':
+      default:
+        return reason == null || reason.isEmpty
+            ? 'Пожалуйста, отмените мой заказ #$orderId.'
+            : 'Пожалуйста, отмените мой заказ #$orderId.\nПричина: $reason';
+    }
+  }
+
+  String _cancellationRequestReplyText({
+    required int orderId,
+    required String lang,
+  }) {
+    switch (lang) {
+      case 'uz':
+        return 'Buyurtma #$orderId bo‘yicha bekor qilish so‘rovi support guruhiga yuborildi. Bekor qilish hali mumkin yoki yo‘qligini tez orada tasdiqlaymiz.';
+      case 'en':
+        return 'Your cancellation request for order #$orderId has been sent to support. We will confirm shortly whether cancellation is still possible.';
+      case 'ru':
+      default:
+        return 'Ваш запрос на отмену заказа #$orderId отправлен в поддержку. Мы скоро подтвердим, возможно ли ещё отменить заказ.';
     }
   }
 
@@ -1879,15 +1993,18 @@ class SupportCenterNotifier extends StateNotifier<SupportCenterConfig> {
         phoneNumber: settings.supportPhone.isEmpty
             ? state.phoneNumber
             : settings.supportPhone,
-        callLabel:
-            settings.callLabel.isEmpty ? defaults.callLabel : settings.callLabel,
-        chatLabel:
-            settings.chatLabel.isEmpty ? defaults.chatLabel : settings.chatLabel,
+        callLabel: settings.callLabel.isEmpty
+            ? defaults.callLabel
+            : settings.callLabel,
+        chatLabel: settings.chatLabel.isEmpty
+            ? defaults.chatLabel
+            : settings.chatLabel,
         chatSubtitle: settings.chatSubtitle.isEmpty
             ? defaults.chatSubtitle
             : settings.chatSubtitle,
-        chatIntro:
-            settings.chatIntro.isEmpty ? defaults.chatIntro : settings.chatIntro,
+        chatIntro: settings.chatIntro.isEmpty
+            ? defaults.chatIntro
+            : settings.chatIntro,
         faqs: nextFaqs.isEmpty ? defaults.faqs : nextFaqs,
       );
       _lastSyncedLang = currentLang;

@@ -1,11 +1,12 @@
 import { api } from '../services/api.js';
 import { escapeHtml, formatMoney } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
+import { renderMetricGrid, renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 const ADMIN_FETCH_LIMIT = 200;
 
 export async function renderDiscounts(ctx) {
-  const { container, token, openFormModal, openConfirmModal, showToast, t = (key) => key } = ctx;
+  const { container, token, openFormModal, openConfirmModal, showToast, uiLang = 'en', t = (key) => key } = ctx;
   const state = { rows: [], products: [], banners: [], sortKey: 'oldPrice', sortDir: 'desc' };
 
   const load = async () => {
@@ -83,14 +84,24 @@ export async function renderDiscounts(ctx) {
       return;
     }
 
+    const scheduledCount = state.rows.filter((row) => (row.discountStartAt || row.discountEndAt)).length;
+
     container.innerHTML = `
-      <section class="panel">
-        <div class="panel-head split">
-          <h2>${escapeHtml(t('discounts_promotions'))}</h2>
-          <button class="btn btn-primary" id="create-discount">${escapeHtml(t('add_discount'))}</button>
-        </div>
-        <div id="discounts-table"></div>
-      </section>
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Campaign control', 'Управление кампаниями', 'Kampaniya boshqaruvi'),
+        title: tr(uiLang, 'Discounts and promotions', 'Скидки и промо', 'Chegirmalar va promo'),
+        description: tr(uiLang, 'Create time-bound offers, review banner-driven promos, and keep pricing campaigns aligned with the active product catalog.', 'Создавайте акции по времени, просматривайте баннерные промо и держите ценовые кампании согласованными с каталогом.', 'Vaqtga bog‘liq aksiyalar yarating, banner promo takliflarini ko‘ring va narx kampaniyalarini faol katalog bilan mos tuting.'),
+      })}
+      ${renderMetricGrid([
+        { label: t('discounts'), value: String(state.rows.length), tone: 'accent', helper: tr(uiLang, 'Products with promo logic', 'Товары с промо-логикой', 'Promo mantiqiga ega mahsulotlar') },
+        { label: tr(uiLang, 'Scheduled', 'По расписанию', 'Jadval bo‘yicha'), value: String(scheduledCount), tone: 'warning', helper: tr(uiLang, 'Uses start/end windows', 'Есть дата начала/окончания', 'Boshlanish/tugash vaqti bor') },
+      ])}
+      ${renderSectionCard({
+        title: t('discounts_promotions'),
+        description: tr(uiLang, 'Use this area for real pricing campaigns only. Product values remain backed by the current backend update flow.', 'Используйте этот раздел только для реальных ценовых кампаний. Значения товара остаются под контролем текущего потока обновления бэкенда.', 'Bu hududni faqat haqiqiy narx kampaniyalari uchun ishlating. Mahsulot qiymatlari joriy backend yangilash oqimi bilan boshqariladi.'),
+        actions: `<button class="btn btn-primary" id="create-discount">${escapeHtml(t('add_discount'))}</button>`,
+        body: '<div id="discounts-table"></div>',
+      })}
     `;
 
     const tableNode = container.querySelector('#discounts-table');
@@ -156,6 +167,7 @@ export async function renderDiscounts(ctx) {
           draw();
         },
         emptyText: t('no_data'),
+        minWidth: '980px',
       });
 
       tableNode.querySelectorAll('[data-action="edit"]').forEach((button) => {

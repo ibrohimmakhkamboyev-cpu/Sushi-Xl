@@ -49,6 +49,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool _searchingAddress = false;
   bool _locating = false;
   bool _permissionDeniedForever = false;
+  bool _needsPinRefinement = false;
   double _mapZoom = 15;
   String _placeName = '';
   String _formattedAddress = '';
@@ -386,6 +387,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final session = ref.read(userSessionProvider);
     if (session == null) return;
     final t = SushiLocalizations.of(context);
+    if (_needsPinRefinement) {
+      _showAddressPrecisionMessage();
+      return;
+    }
     final addressLine = await _effectiveAddressLine(t);
     if (addressLine == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -440,6 +445,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (session == null) return false;
     final t = SushiLocalizations.of(context);
     if (_addressId != null) return true;
+    if (_needsPinRefinement) {
+      _showAddressPrecisionMessage();
+      return false;
+    }
     final addressLine = await _effectiveAddressLine(t);
     if (addressLine == null) {
       if (mounted) {
@@ -562,7 +571,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
       if (results.isNotEmpty) {
         if (mounted) {
-          final top = results.take(5).toList();
+          final top = _rankSearchResults(results).take(5).toList();
           final latestQuery = _addressController.text.trim();
           if (latestQuery != query.trim()) return;
           setState(() {
@@ -571,7 +580,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               ..addAll(top);
           });
           if (autoSelectTop) {
-            await _applyPlaceSelection(top.first, clearSuggestions: false);
+            final selected = _bestAutoSelection(top);
+            if (selected != null) {
+              await _applyPlaceSelection(selected, clearSuggestions: false);
+            } else {
+              await _applyPlaceSelection(
+                top.first,
+                clearSuggestions: false,
+                requirePinRefinement: true,
+              );
+              _showAddressPrecisionMessage();
+            }
           }
         }
       } else {
@@ -604,6 +623,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     setState(() {
       _addressId = null;
       _searchSuggestions.clear();
+      _needsPinRefinement = false;
       final matchesSelected = trimmed.isNotEmpty &&
           trimmed.toLowerCase() ==
               _composeAddress(_placeName, _formattedAddress)
@@ -715,6 +735,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         _pickedLng = resolvedPos.longitude;
         _hasConsumerCoords = true;
         _addressId = null;
+        _needsPinRefinement = false;
         _searchSuggestions.clear();
         if (_mapZoom < 16) _mapZoom = 16;
       });
@@ -843,6 +864,83 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         text.contains('мфй');
   }
 
+  bool _hasHouseNumber(String value) {
+    return RegExp(
+      r'\b\d+[A-Za-zА-Яа-я]?\b',
+      caseSensitive: false,
+    ).hasMatch(value);
+  }
+
+  bool _isAdministrativeKind(String kind) {
+    switch (kind.trim().toLowerCase()) {
+      case 'country':
+      case 'province':
+      case 'area':
+      case 'locality':
+      case 'district':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool _isPreciseSearchResult(ProxyPlace place) {
+    final kind = place.kind.trim().toLowerCase();
+    final precision = place.precision.trim().toLowerCase();
+    final combined = '${place.placeName}, ${place.formattedAddress}';
+    if (kind == 'house') return true;
+    if (precision == 'exact' || precision == 'number') return true;
+    if (_hasHouseNumber(combined)) return true;
+    if (kind == 'street' &&
+        !_isAdministrativeLabel(place.placeName) &&
+        !_isAdministrativeLabel(place.formattedAddress)) {
+      return true;
+    }
+    return false;
+  }
+
+  int _searchResultScore(ProxyPlace place) {
+    final kind = place.kind.trim().toLowerCase();
+    final precision = place.precision.trim().toLowerCase();
+    final combined = '${place.placeName}, ${place.formattedAddress}';
+    var score = 0;
+    if (_isPreciseSearchResult(place)) score += 1000;
+    if (kind == 'house') score += 500;
+    if (kind == 'street') score += 250;
+    if (_hasHouseNumber(combined)) score += 180;
+    if (precision == 'exact' || precision == 'number') score += 160;
+    if (precision == 'near' || precision == 'street') score += 80;
+    if (_isAdministrativeKind(kind)) score -= 500;
+    if (_isAdministrativeLabel(place.placeName) ||
+        _isAdministrativeLabel(place.formattedAddress)) {
+      score -= 220;
+    }
+    return score;
+  }
+
+  List<ProxyPlace> _rankSearchResults(List<ProxyPlace> places) {
+    final ranked = places.toList();
+    ranked
+        .sort((a, b) => _searchResultScore(b).compareTo(_searchResultScore(a)));
+    return ranked;
+  }
+
+  ProxyPlace? _bestAutoSelection(List<ProxyPlace> places) {
+    for (final place in places) {
+      if (_isPreciseSearchResult(place)) return place;
+    }
+    return null;
+  }
+
+  void _showAddressPrecisionMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Укажите улицу и дом или поставьте точку дома на карте'),
+      ),
+    );
+  }
+
   String _visibleAddressLabel(String placeName, String formattedAddress) {
     final short = placeName.trim();
     final long = formattedAddress.trim();
@@ -926,7 +1024,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   String _proxyLang() {
-    return 'ru_RU';
+    final code = Localizations.localeOf(context).languageCode.toLowerCase();
+    switch (code) {
+      case 'uz':
+        return 'uz_UZ';
+      case 'en':
+        return 'en_US';
+      default:
+        return 'ru_RU';
+    }
   }
 
   String _composeAddress(String placeName, String formattedAddress) {
@@ -937,12 +1043,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     ProxyPlace place, {
     required bool clearSuggestions,
     bool clearSavedAddressId = true,
+    bool requirePinRefinement = false,
   }) async {
     setState(() {
       _pickedLat = place.lat;
       _pickedLng = place.lon;
       _hasConsumerCoords = true;
       _permissionDeniedForever = false;
+      _needsPinRefinement = requirePinRefinement;
       if (clearSavedAddressId) {
         _addressId = null;
       }
@@ -960,7 +1068,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _selectSuggestion(ProxyPlace place) async {
-    await _applyPlaceSelection(place, clearSuggestions: true);
+    final needsRefinement = !_isPreciseSearchResult(place);
+    await _applyPlaceSelection(
+      place,
+      clearSuggestions: true,
+      requirePinRefinement: needsRefinement,
+    );
+    if (needsRefinement) {
+      _showAddressPrecisionMessage();
+    }
   }
 
   Widget _addressSearchField(SushiLocalizations t, {bool embedded = false}) {

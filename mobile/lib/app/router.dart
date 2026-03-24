@@ -106,7 +106,12 @@ GoRouter buildRouter() {
       ),
       GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
       GoRoute(
-          path: '/support/chat', builder: (_, __) => const SupportChatScreen()),
+        path: '/support/chat',
+        builder: (_, state) => SupportChatScreen(
+          cancellationOrderId:
+              int.tryParse(state.uri.queryParameters['cancelOrderId'] ?? ''),
+        ),
+      ),
       GoRoute(path: '/saved', builder: (_, __) => const SavedScreen()),
       GoRoute(path: '/search', builder: (_, __) => const SearchScreen()),
       GoRoute(

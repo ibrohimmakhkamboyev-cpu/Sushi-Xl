@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config.dart';
@@ -40,11 +41,11 @@ class GeocoderProxyClient {
     http.Client? client,
     String? baseUrl,
   })  : _client = client ?? http.Client(),
-        _baseUri = Uri.parse((baseUrl ?? geocoderProxyBaseUrl).trim()),
+        _baseUri = _buildBaseUri(baseUrl),
         _fallbackGeocoder = YandexHttpGeocoder();
 
   final http.Client _client;
-  final Uri _baseUri;
+  final Uri? _baseUri;
   final YandexHttpGeocoder _fallbackGeocoder;
 
   Future<List<ProxyPlace>> geocode({
@@ -54,40 +55,43 @@ class GeocoderProxyClient {
   }) async {
     final normalized = _normalizeQuery(text);
     if (normalized.isEmpty) return const [];
-    final uri = _baseUri.replace(
-      path: _joinPath(_baseUri.path, '/api/geocode'),
+    final resolvedLang = _normalizeLang(lang);
+    final body = await _getProxyJson(
+      path: '/api/geocode',
       queryParameters: {
         'text': normalized,
-        'lang': lang,
+        'lang': resolvedLang,
         'results': results.toString(),
       },
     );
-    final body = await _getJson(uri);
     final proxied = _parseProxyResults(body, results: results);
     final preferredProxy = _preferUzbekistanResults(proxied, results: results);
     if (preferredProxy.isNotEmpty) return preferredProxy;
 
     final collected = <ProxyPlace>[];
     final seen = <String>{};
-    for (final query in _fallbackQueries(normalized)) {
-      final fallback = await _fallbackGeocoder.forward(
-        query,
-        maxResults: results,
-        restrictToUzbekistan: true,
-      );
-      for (final item in fallback) {
-        final place = _placeFromAddress(
-          lat: item.lat,
-          lon: item.lng,
-          address: item.address,
+    for (final candidateLang in _languageChain(resolvedLang)) {
+      for (final query in _fallbackQueries(normalized)) {
+        final fallback = await _fallbackGeocoder.forward(
+          query,
+          maxResults: results,
+          restrictToUzbekistan: true,
+          lang: candidateLang,
         );
-        if (!_isUzbekistanPlace(place)) continue;
-        final key = _dedupeKey(place);
-        if (seen.add(key)) {
-          collected.add(place);
-        }
-        if (collected.length >= results) {
-          return collected;
+        for (final item in fallback) {
+          final place = _placeFromAddress(
+            lat: item.lat,
+            lon: item.lng,
+            address: item.address,
+          );
+          if (!_isUzbekistanPlace(place)) continue;
+          final key = _dedupeKey(place);
+          if (seen.add(key)) {
+            collected.add(place);
+          }
+          if (collected.length >= results) {
+            return collected;
+          }
         }
       }
     }
@@ -100,27 +104,48 @@ class GeocoderProxyClient {
     String lang = 'ru_RU',
   }) async {
     if (!_validLatLon(lat, lon)) return null;
-    final uri = _baseUri.replace(
-      path: _joinPath(_baseUri.path, '/api/reverse'),
+    final resolvedLang = _normalizeLang(lang);
+    final body = await _getProxyJson(
+      path: '/api/reverse',
       queryParameters: {
         'lat': lat.toString(),
         'lon': lon.toString(),
-        'lang': lang,
+        'lang': resolvedLang,
       },
     );
-    final body = await _getJson(uri);
     if (body is Map) {
       final parsed = _parsePlaceFromMap(body.cast<String, dynamic>());
       if (parsed != null) return parsed;
     }
-    final fallback = await _fallbackGeocoder.reverse(lat, lon, maxResults: 1);
-    if (fallback.isEmpty) return null;
-    final item = fallback.first;
-    return _placeFromAddress(
-      lat: item.lat,
-      lon: item.lng,
-      address: item.address,
+    for (final candidateLang in _languageChain(resolvedLang)) {
+      final fallback = await _fallbackGeocoder.reverse(
+        lat,
+        lon,
+        maxResults: 1,
+        lang: candidateLang,
+      );
+      if (fallback.isEmpty) continue;
+      final item = fallback.first;
+      return _placeFromAddress(
+        lat: item.lat,
+        lon: item.lng,
+        address: item.address,
+      );
+    }
+    return null;
+  }
+
+  Future<dynamic> _getProxyJson({
+    required String path,
+    required Map<String, String> queryParameters,
+  }) async {
+    final baseUri = _baseUri;
+    if (baseUri == null) return null;
+    final uri = baseUri.replace(
+      path: _joinPath(baseUri.path, path),
+      queryParameters: queryParameters,
     );
+    return _getJson(uri);
   }
 
   Future<dynamic> _getJson(Uri uri) async {
@@ -235,26 +260,60 @@ class GeocoderProxyClient {
   }
 
   List<String> _fallbackQueries(String normalized) {
-    if (_queryMentionsUzbekistan(normalized)) {
-      return [normalized];
+    final out = <String>[];
+
+    void add(String value) {
+      final candidate = value.trim();
+      if (candidate.isEmpty || out.contains(candidate)) return;
+      out.add(candidate);
     }
-    return [
-      '$normalized, Tashkent, Uzbekistan',
-      '$normalized, Uzbekistan',
-      normalized,
-    ];
+
+    add(normalized);
+
+    final stripped = _stripLeadingAddressType(normalized);
+    if (stripped != normalized) add(stripped);
+
+    final mentionsCountry = _queryMentionsUzbekistan(normalized);
+    final mentionsCity = _queryMentionsTashkent(normalized);
+    if (mentionsCountry && mentionsCity) return out;
+
+    final seeds = List<String>.from(out);
+    for (final seed in seeds) {
+      if (!mentionsCity && !mentionsCountry) {
+        add('$seed, Toshkent, O\'zbekiston');
+        add('$seed, Tashkent, Uzbekistan');
+        add('$seed, Ташкент, Узбекистан');
+      } else if (!mentionsCity) {
+        add('$seed, Toshkent');
+        add('$seed, Tashkent');
+        add('$seed, Ташкент');
+      } else if (!mentionsCountry) {
+        add('$seed, O\'zbekiston');
+        add('$seed, Uzbekistan');
+        add('$seed, Узбекистан');
+      }
+    }
+    return out;
   }
 
   bool _queryMentionsUzbekistan(String query) {
     final value = query.toLowerCase();
     return value.contains('uzbek') ||
+        value.contains('uzbekiston') ||
         value.contains('uzb') ||
         value.contains('o`zbek') ||
+        value.contains("o'zbek") ||
         value.contains('o‘zbek') ||
-        value.contains('toshkent') ||
-        value.contains('tashkent') ||
         value.contains('узбек') ||
-        value.contains('ташкент');
+        value.contains('ўзбек');
+  }
+
+  bool _queryMentionsTashkent(String query) {
+    final value = query.toLowerCase();
+    return value.contains('toshkent') ||
+        value.contains('tashkent') ||
+        value.contains('ташкент') ||
+        value.contains('тошкент');
   }
 
   bool _isUzbekistanPlace(ProxyPlace place) {
@@ -283,7 +342,23 @@ class GeocoderProxyClient {
   }
 
   String _normalizeQuery(String text) {
-    return text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    var normalized = text.trim();
+    if (normalized.isEmpty) return '';
+    normalized = normalized
+        .replaceAll(RegExp(r"[ʻʼ‘’`´]"), "'")
+        .replaceAll(RegExp(r'\s+'), ' ');
+    normalized = normalized.replaceFirstMapped(
+      RegExp(r'^(улица|ул\.?)(?=[A-Za-zА-Яа-яЁё0-9])', caseSensitive: false),
+      (match) => '${match.group(0)} ',
+    );
+    normalized = normalized.replaceFirstMapped(
+      RegExp(
+        r"^(ko'chasi|kochasi|ko‘chasi|kuchasi)(?=[A-Za-zА-Яа-яЁё0-9])",
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(0)} ',
+    );
+    return normalized;
   }
 
   bool _validLatLon(double lat, double lon) {
@@ -296,6 +371,51 @@ class GeocoderProxyClient {
     if (b.isEmpty || b == '/') return n;
     if (b.endsWith('/')) return '${b.substring(0, b.length - 1)}$n';
     return '$b$n';
+  }
+
+  static Uri? _buildBaseUri(String? baseUrl) {
+    final configured = (baseUrl ?? geocoderProxyBaseUrl).trim();
+    if (configured.isNotEmpty) {
+      return Uri.tryParse(configured);
+    }
+    if (kReleaseMode) return null;
+
+    final fallback = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'http://10.0.2.2:8000',
+      _ => 'http://127.0.0.1:8000',
+    };
+    return Uri.parse(fallback);
+  }
+
+  String _normalizeLang(String lang) {
+    final value = lang.trim().toLowerCase();
+    if (value.startsWith('uz')) return 'uz_UZ';
+    if (value.startsWith('en')) return 'en_US';
+    return 'ru_RU';
+  }
+
+  List<String> _languageChain(String lang) {
+    final preferred = _normalizeLang(lang);
+    switch (preferred) {
+      case 'uz_UZ':
+        return const ['uz_UZ', 'ru_RU', 'en_US'];
+      case 'en_US':
+        return const ['en_US', 'uz_UZ', 'ru_RU'];
+      default:
+        return const ['ru_RU', 'uz_UZ', 'en_US'];
+    }
+  }
+
+  String _stripLeadingAddressType(String query) {
+    return query
+        .replaceFirst(
+          RegExp(
+            r"^(улица|ул\.?|street|st\.?|ko'chasi|kochasi|ko‘chasi|kuchasi)\s+",
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
   }
 
   void dispose() {

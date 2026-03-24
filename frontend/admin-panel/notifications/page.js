@@ -2,6 +2,7 @@ import { api } from '../services/api.js';
 import { escapeHtml, formatDate } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
 import { statusBadge } from '../components/badge.js';
+import { renderMetricGrid, renderPageHeader } from '../components/page-shell.js';
 
 const TYPE_OPTIONS = ['info', 'success', 'warning', 'error'];
 const DELIVERY_OPTIONS = ['push', 'in_app', 'mailing'];
@@ -224,6 +225,7 @@ export async function renderNotifications(ctx) {
     const currentForm = activeForm || (editing
       ? formFromRow(state.rows.find((row) => row.id === state.editingId) || {})
       : emptyForm());
+    const activeCount = state.rows.filter((row) => row.isActive).length;
 
     const deliveryChecks = DELIVERY_OPTIONS.map((item) => {
       const checked = currentForm.deliveryTypes.includes(item) ? 'checked' : '';
@@ -241,6 +243,15 @@ export async function renderNotifications(ctx) {
     }).join('');
 
     container.innerHTML = `
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Comms center', 'Центр коммуникаций', 'Aloqa markazi'),
+        title: tr(uiLang, 'Notifications and delivery control', 'Уведомления и управление доставкой', 'Bildirishnomalar va yuborish boshqaruvi'),
+        description: tr(uiLang, 'Create multilingual announcements, choose supported delivery channels, preview content, and review saved notification records in one workspace.', 'Создавайте многоязычные объявления, выбирайте поддерживаемые каналы доставки, просматривайте предпросмотр и управляйте историей уведомлений в одном пространстве.', 'Ko‘p tilli e’lonlar yarating, qo‘llab-quvvatlanadigan yuborish kanallarini tanlang, kontentni oldindan ko‘ring va bildirishnoma yozuvlarini bitta maydonda boshqaring.'),
+      })}
+      ${renderMetricGrid([
+        { label: t('notifications'), value: String(state.rows.length), tone: 'accent', helper: tr(uiLang, 'Saved notification records', 'Сохраненные записи уведомлений', 'Saqlangan bildirishnomalar') },
+        { label: t('active'), value: String(activeCount), tone: 'success', helper: tr(uiLang, 'Available for delivery', 'Доступно для доставки', 'Yuborish uchun tayyor') },
+      ])}
       <div class="notifications-page-grid">
         <section class="panel notifications-table-panel">
           <div class="panel-head split">

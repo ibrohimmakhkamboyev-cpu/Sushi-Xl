@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format/currency.dart';
 import '../../core/localization/sushi_localizations.dart';
 import '../../core/state/providers.dart';
+import '../../core/widgets/remote_image_box.dart';
 import '../../data/models/menu_models.dart';
 
 class SavedScreen extends ConsumerWidget {
@@ -662,19 +663,12 @@ class _SavedCard extends ConsumerWidget {
           ),
           child: Row(
             children: <Widget>[
-              Container(
+              RemoteImageBox(
+                imageUrl: image,
                 width: 82,
                 height: 82,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  image: image == null || image.isEmpty
-                      ? null
-                      : DecorationImage(
-                          image: NetworkImage(image),
-                          fit: BoxFit.cover,
-                        ),
-                  color: const Color(0xFFF1E5E1),
-                ),
+                borderRadius: BorderRadius.circular(18),
+                backgroundColor: const Color(0xFFF1E5E1),
               ),
               const SizedBox(width: 14),
               Expanded(

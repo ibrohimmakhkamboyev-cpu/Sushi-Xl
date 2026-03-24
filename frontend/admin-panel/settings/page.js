@@ -1,8 +1,9 @@
 import { api, getApiBase, setApiBase } from '../services/api.js';
 import { escapeHtml } from '../models/serializers.js';
+import { renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 export async function renderSettings(ctx) {
-  const { container, token, showToast, openConfirmModal, t = (key) => key } = ctx;
+  const { container, token, showToast, openConfirmModal, uiLang = 'en', t = (key) => key } = ctx;
   container.innerHTML = `<div class="page-state loading">${escapeHtml(t('loading_settings'))}</div>`;
 
   try {
@@ -10,14 +11,18 @@ export async function renderSettings(ctx) {
     const apiBase = getApiBase();
 
     container.innerHTML = `
-      <section class="panel form-panel">
-        <div class="panel-head">
-          <h2>${escapeHtml(t('settings_general'))}</h2>
-          <div class="toolbar">
-            <button type="button" id="settings-create" class="btn btn-muted">${escapeHtml(t('create'))}</button>
-            <button type="button" id="settings-reset" class="btn btn-danger">${escapeHtml(t('reset_form'))}</button>
-          </div>
-        </div>
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'System controls', 'Системные настройки', 'Tizim boshqaruvi'),
+        title: tr(uiLang, 'Admin settings', 'Настройки администратора', 'Admin sozlamalari'),
+        description: tr(uiLang, 'Manage support communication labels, chat copy, API routing, timezone, and other shared admin behavior without flattening everything into a plain form.', 'Управляйте подписями поддержки, текстами чата, API-маршрутизацией, часовым поясом и другим общим поведением админки без плоской формы.', 'Qo‘llab-quvvatlash yorliqlari, chat matnlari, API marshruti, vaqt zonasi va umumiy admin xatti-harakatlarini oddiy forma ko‘rinishiga tushirmasdan boshqaring.') })}
+      ${renderSectionCard({
+        title: t('settings_general'),
+        description: tr(uiLang, 'Grouped controls for support, chat copy, localization, and environment routing.', 'Сгруппированные настройки для поддержки, чата, локализации и маршрутизации окружения.', 'Qo‘llab-quvvatlash, chat matni, lokalizatsiya va muhit marshrutlari uchun guruhlangan sozlamalar.'),
+        actions: `
+          <button type="button" id="settings-create" class="btn btn-muted">${escapeHtml(t('create'))}</button>
+          <button type="button" id="settings-reset" class="btn btn-danger">${escapeHtml(t('reset_form'))}</button>
+        `,
+        body: `
         <form id="settings-form" class="inline-form-grid">
           <label class="field">
             <span>${escapeHtml(t('support_phone'))}</span>
@@ -87,7 +92,8 @@ export async function renderSettings(ctx) {
             <button type="submit" class="btn btn-primary">${escapeHtml(t('save_settings'))}</button>
           </div>
         </form>
-      </section>
+        `,
+      })}
     `;
 
     container.querySelector('#settings-form').addEventListener('submit', async (event) => {

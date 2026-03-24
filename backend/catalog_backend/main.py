@@ -3549,6 +3549,7 @@ def _sync_order_status_from_poster(conn, row: dict[str, Any]) -> dict[str, Any]:
     poster_status = poster_state.get('poster_status')
     app_status = str(poster_state.get('app_status') or '').strip()
     tx_id = poster_state.get('transaction_id')
+    current_status = str(row.get('status') or '').strip()
     if tx_id is not None:
         try:
             tx_state = poster_client.get_transaction_state(
@@ -3557,7 +3558,7 @@ def _sync_order_status_from_poster(conn, row: dict[str, Any]) -> dict[str, Any]:
             )
             tx_app_status = str(tx_state.get('app_status') or '').strip()
             if tx_app_status:
-                app_status = tx_app_status
+                app_status = _prefer_synced_order_status(app_status, tx_app_status, current_status)
             closed = tx_state.get('closed')
             if not isinstance(closed, bool):
                 closed = poster_client.is_transaction_closed(
@@ -3587,7 +3588,6 @@ def _sync_order_status_from_poster(conn, row: dict[str, Any]) -> dict[str, Any]:
 
     updated = dict(row)
     updated['poster_status'] = poster_status
-    current_status = str(updated.get('status') or '').strip()
     if app_status and app_status != current_status:
         conn.execute(
             'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -3595,6 +3595,35 @@ def _sync_order_status_from_poster(conn, row: dict[str, Any]) -> dict[str, Any]:
         )
         updated['status'] = app_status
     return updated
+
+
+def _order_status_rank(raw: str) -> int:
+    normalized = str(raw or '').strip().lower()
+    if normalized in {'cancelled', 'delivered'}:
+        return 5
+    if normalized == 'on_the_way':
+        return 4
+    if normalized == 'preparing':
+        return 3
+    if normalized in {'accepted', 'sent'}:
+        return 2
+    if normalized in {'pending', 'new', 'telegram_only'}:
+        return 1
+    return 0
+
+
+def _prefer_synced_order_status(*candidates: str) -> str:
+    best = ''
+    best_rank = -1
+    for candidate in candidates:
+        normalized = str(candidate or '').strip().lower()
+        if not normalized:
+            continue
+        rank = _order_status_rank(normalized)
+        if rank > best_rank:
+            best = normalized
+            best_rank = rank
+    return best
 
 
 def _ensure_category_exists(conn, category_id: int) -> None:

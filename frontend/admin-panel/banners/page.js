@@ -2,6 +2,7 @@ import { api } from '../services/api.js';
 import { escapeHtml } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
 import { statusBadge } from '../components/badge.js';
+import { renderMetricGrid, renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 function pickLocalized(row, base, uiLang = 'en') {
   if (uiLang === 'ru') return row?.[`${base}Ru`] || row?.[`${base}En`] || row?.[base] || '';
@@ -36,6 +37,41 @@ function actionLabel(actionType, t) {
     open_url: t('open_url'),
   };
   return map[actionType] || actionType;
+}
+
+function describeBannerTarget(row, state, uiLang, t) {
+  const actionType = String(row?.actionType || 'none').trim().toLowerCase();
+  if (actionType === 'open_product') {
+    const productId = Number(row?.productId || 0);
+    const product = state.products.find((item) => Number(item.id) === productId);
+    if (!productId) {
+      return tr(uiLang, 'No product linked', 'Товар не привязан', 'Mahsulot bog‘lanmagan');
+    }
+    const title = product ? pickLocalized(product, 'title', uiLang) : `#${productId}`;
+    return `${actionLabel(actionType, t)}: ${title}`;
+  }
+  if (actionType === 'open_products') {
+    const linked = Array.isArray(row?.linkedProductIds) ? row.linkedProductIds : row?.productIds || [];
+    const count = linked.filter((item) => Number(item) > 0).length;
+    return count > 0
+      ? `${actionLabel(actionType, t)}: ${count}`
+      : tr(uiLang, 'No products linked', 'Товары не привязаны', 'Mahsulotlar bog‘lanmagan');
+  }
+  if (actionType === 'open_category') {
+    const categoryId = Number(row?.categoryId || 0);
+    const category = state.categories.find((item) => Number(item.id) === categoryId);
+    if (!categoryId) {
+      return tr(uiLang, 'No category linked', 'Категория не привязана', 'Kategoriya bog‘lanmagan');
+    }
+    return `${actionLabel(actionType, t)}: ${category ? pickLocalized(category, 'name', uiLang) : `#${categoryId}`}`;
+  }
+  if (actionType === 'open_discounts') {
+    return tr(uiLang, 'Opens discounts screen', 'Открывает экран скидок', 'Chegirmalar ekranini ochadi');
+  }
+  if (actionType === 'open_url') {
+    return String(row?.targetUrl || '').trim() || tr(uiLang, 'No URL set', 'URL не задан', 'URL kiritilmagan');
+  }
+  return tr(uiLang, 'Does not open anything', 'Ничего не открывает', 'Hech narsa ochmaydi');
 }
 
 function normalizeBannerPayload(form, current = null) {
@@ -143,7 +179,7 @@ export async function renderBanners(ctx) {
         { name: 'subtitleEn', label: t('subtitle_en') },
         { name: 'subtitleRu', label: t('subtitle_ru') },
         { name: 'subtitleUz', label: t('subtitle_uz') },
-        { name: 'imageUrl', label: t('image_url'), required: true },
+        { name: 'imageUrl', label: t('image_url') },
         { name: 'imageFile', label: t('upload_image'), type: 'file', accept: 'image/*' },
         {
           name: 'actionType',
@@ -206,14 +242,24 @@ export async function renderBanners(ctx) {
       return;
     }
 
+    const activeCount = state.rows.filter((row) => row.isActive).length;
+
     container.innerHTML = `
-      <section class="panel">
-        <div class="panel-head split">
-          <h2>${escapeHtml(t('banners_management'))}</h2>
-          <button class="btn btn-primary" id="add-banner">${escapeHtml(t('add_banner'))}</button>
-        </div>
-        <div id="banners-table"></div>
-      </section>
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Media placements', 'Медиа-размещения', 'Media joylashuvi'),
+        title: tr(uiLang, 'Banner control center', 'Центр управления баннерами', 'Banner boshqaruv markazi'),
+        description: tr(uiLang, 'Handle homepage storytelling, linked products, and category-driven banner destinations with stronger media presentation.', 'Управляйте визуальными акцентами главной страницы, связанными товарами и переходами по категориям с более сильной подачей медиа.', 'Bosh sahifa hikoyasi, bog‘langan mahsulotlar va kategoriyaga yo‘naltirilgan banner manzillarini kuchliroq media ko‘rinishi bilan boshqaring.'),
+      })}
+      ${renderMetricGrid([
+        { label: t('banners'), value: String(state.rows.length), tone: 'accent', helper: tr(uiLang, 'Total creative placements', 'Всего креативных размещений', 'Jami kreativ joylashuvlar') },
+        { label: t('active'), value: String(activeCount), tone: 'success', helper: tr(uiLang, 'Currently visible', 'Сейчас видимы', 'Hozir ko‘rinadigan') },
+      ])}
+      ${renderSectionCard({
+        title: t('banners_management'),
+        description: tr(uiLang, 'Upload, target, reorder, and activate storefront banners without losing the existing linking behavior.', 'Загружайте, нацеливайте, сортируйте и активируйте баннеры витрины без потери текущей логики привязки.', 'Joriy bog‘lash xatti-harakatini yo‘qotmasdan bannerlarni yuklang, yo‘naltiring, tartiblang va faollashtiring.'),
+        actions: `<button type="button" class="btn btn-primary" id="add-banner">${escapeHtml(t('add_banner'))}</button>`,
+        body: '<div id="banners-table"></div>',
+      })}
     `;
 
     const tableRoot = container.querySelector('#banners-table');
@@ -237,6 +283,12 @@ export async function renderBanners(ctx) {
         sortable: true,
         render: (row) => statusBadge(row.actionType || 'none', actionLabel(row.actionType || 'none', t)),
       },
+      {
+        key: 'destination',
+        label: tr(uiLang, 'Destination', 'Назначение', 'Yo‘nalish'),
+        sortable: false,
+        render: (row) => escapeHtml(describeBannerTarget(row, state, uiLang, t)),
+      },
       { key: 'sortOrder', label: t('sort'), sortable: true },
       { key: 'isActive', label: t('active'), sortable: true, render: (row) => statusBadge(row.isActive ? 'active' : 'inactive') },
       {
@@ -245,8 +297,8 @@ export async function renderBanners(ctx) {
         sortable: false,
         render: (row) => `
           <div class="table-actions">
-            <button class="btn btn-sm btn-muted" data-action="edit" data-id="${row.id}">${escapeHtml(t('edit'))}</button>
-            <button class="btn btn-sm btn-danger" data-action="delete" data-id="${row.id}">${escapeHtml(t('delete'))}</button>
+            <button type="button" class="btn btn-sm btn-muted" data-action="edit" data-id="${row.id}">${escapeHtml(t('edit'))}</button>
+            <button type="button" class="btn btn-sm btn-danger" data-action="delete" data-id="${row.id}">${escapeHtml(t('delete'))}</button>
           </div>
         `,
       },
@@ -264,6 +316,7 @@ export async function renderBanners(ctx) {
           draw();
         },
         emptyText: t('no_data'),
+        minWidth: '1080px',
       });
 
       tableRoot.querySelectorAll('[data-action="edit"]').forEach((button) => {
@@ -275,6 +328,10 @@ export async function renderBanners(ctx) {
           if (!form) return;
           try {
             const payload = normalizeBannerPayload(form, current);
+            if (!payload.imageUrl && !form.imageFile) {
+              showToast(t('banner_image_required'), 'error');
+              return;
+            }
             if (form.imageFile) {
               const uploaded = await api.uploadImage(token, form.imageFile);
               payload.imageUrl = (uploaded.imageUrl || uploaded.path || '').trim() || payload.imageUrl;
@@ -316,6 +373,10 @@ export async function renderBanners(ctx) {
       if (!form) return;
       try {
         const payload = normalizeBannerPayload(form);
+        if (!payload.imageUrl && !form.imageFile) {
+          showToast(t('banner_image_required'), 'error');
+          return;
+        }
         if (form.imageFile) {
           const uploaded = await api.uploadImage(token, form.imageFile);
           payload.imageUrl = (uploaded.imageUrl || uploaded.path || '').trim() || payload.imageUrl;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/state/providers.dart';
+import '../../core/widgets/remote_image_box.dart';
 import '../../data/models/menu_models.dart';
 import '../../data/models/cart_models.dart';
 import '../../core/format/currency.dart';
@@ -42,16 +43,10 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
                   children: [
                     Stack(
                       children: [
-                        Container(
+                        RemoteImageBox(
+                          imageUrl: image,
                           height: 280,
-                          decoration: BoxDecoration(
-                            color: Colors.black12,
-                            image: image == null || image.isEmpty
-                                ? null
-                                : DecorationImage(
-                                    image: NetworkImage(image),
-                                    fit: BoxFit.cover),
-                          ),
+                          backgroundColor: Colors.black12,
                         ),
                         Positioned(
                           left: 16,

@@ -6,6 +6,7 @@ import '../../core/state/providers.dart';
 import '../../core/format/currency.dart';
 import '../../data/models/menu_models.dart';
 import '../../core/localization/sushi_localizations.dart';
+import '../../core/widgets/remote_image_box.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -96,17 +97,12 @@ class _SearchCard extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Container(
+          RemoteImageBox(
+            imageUrl: image,
             width: 72,
             height: 72,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              image: image == null || image.isEmpty
-                  ? null
-                  : DecorationImage(
-                      image: NetworkImage(image), fit: BoxFit.cover),
-              color: Colors.black12,
-            ),
+            borderRadius: BorderRadius.circular(12),
+            backgroundColor: Colors.black12,
           ),
           const SizedBox(width: 12),
           Expanded(

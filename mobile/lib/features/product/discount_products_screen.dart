@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/format/currency.dart';
 import '../../core/state/catalog_providers.dart';
 import '../../core/state/providers.dart';
+import '../../core/widgets/remote_image_box.dart';
 import '../../data/models/menu_models.dart';
 
 class DiscountProductsPage extends ConsumerWidget {
@@ -36,7 +37,8 @@ class DiscountProductsPage extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Failed to load discounts: $err')),
+        error: (err, _) =>
+            Center(child: Text('Failed to load discounts: $err')),
       ),
     );
   }
@@ -68,19 +70,12 @@ class _DiscountListCard extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            Container(
+            RemoteImageBox(
+              imageUrl: image,
               width: 88,
               height: 88,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: const Color(0xFFF0F0F0),
-                image: image == null || image.isEmpty
-                    ? null
-                    : DecorationImage(
-                        image: NetworkImage(image),
-                        fit: BoxFit.cover,
-                      ),
-              ),
+              borderRadius: BorderRadius.circular(14),
+              backgroundColor: const Color(0xFFF0F0F0),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -148,7 +143,8 @@ class _DiscountListCard extends ConsumerWidget {
                       ],
                       const Spacer(),
                       ElevatedButton(
-                        onPressed: () => ref.read(cartProvider.notifier).add(product),
+                        onPressed: () =>
+                            ref.read(cartProvider.notifier).add(product),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFEE482B),
                           shape: RoundedRectangleBorder(

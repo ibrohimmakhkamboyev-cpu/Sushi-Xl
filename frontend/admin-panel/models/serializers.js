@@ -10,6 +10,12 @@ function toText(value) {
   return String(value);
 }
 
+function resolveLocale(uiLang = 'en') {
+  if (uiLang === 'ru') return 'ru-RU';
+  if (uiLang === 'uz') return 'uz-UZ';
+  return 'en-US';
+}
+
 export function escapeHtml(value) {
   return toText(value)
     .replaceAll('&', '&amp;')
@@ -19,13 +25,22 @@ export function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
-export function formatMoney(value, currency = 'UZS') {
+export function formatMoney(value, currency = 'UZS', uiLang = 'en') {
   const amount = Number(value || 0);
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(resolveLocale(uiLang), {
     style: 'currency',
     currency,
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+export function formatCompactMoney(value, currency = 'UZS', uiLang = 'en') {
+  const amount = Number(value || 0);
+  const compact = new Intl.NumberFormat(resolveLocale(uiLang), {
+    notation: 'compact',
+    maximumFractionDigits: 2,
+  }).format(amount);
+  return `${currency} ${compact}`;
 }
 
 export function formatDate(value) {

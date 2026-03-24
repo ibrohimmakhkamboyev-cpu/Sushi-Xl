@@ -6,7 +6,12 @@ import '../../core/localization/sushi_localizations.dart';
 import '../../core/state/providers.dart';
 
 class SupportChatScreen extends ConsumerStatefulWidget {
-  const SupportChatScreen({super.key});
+  const SupportChatScreen({
+    super.key,
+    this.cancellationOrderId,
+  });
+
+  final int? cancellationOrderId;
 
   @override
   ConsumerState<SupportChatScreen> createState() => _SupportChatScreenState();
@@ -15,6 +20,15 @@ class SupportChatScreen extends ConsumerStatefulWidget {
 class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
   final _messageCtrl = TextEditingController();
   bool _sending = false;
+  bool _autoCancellationSent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sendCancellationRequestIfNeeded();
+    });
+  }
 
   @override
   void dispose() {
@@ -35,6 +49,12 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
           session,
         );
     final messages = ref.watch(supportThreadMessagesProvider(threadId));
+
+    if (!_autoCancellationSent && widget.cancellationOrderId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _sendCancellationRequestIfNeeded();
+      });
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F4F5),
@@ -195,6 +215,17 @@ class _SupportChatScreenState extends ConsumerState<SupportChatScreen> {
         setState(() => _sending = false);
       }
     }
+  }
+
+  Future<void> _sendCancellationRequestIfNeeded() async {
+    final orderId = widget.cancellationOrderId;
+    if (_autoCancellationSent || orderId == null || orderId <= 0) return;
+    _autoCancellationSent = true;
+    final session = ref.read(userSessionProvider) ?? UserSession.guest();
+    await ref.read(supportInboxProvider.notifier).sendCancellationRequest(
+          session: session,
+          orderId: orderId,
+        );
   }
 }
 

@@ -18,6 +18,7 @@ export function renderTable({
   state,
   onSortChange,
   emptyText = 'No data',
+  minWidth = '820px',
 }) {
   const sorted = sortRows(rows, state.sortKey, state.sortDir);
   const head = columns
@@ -38,13 +39,13 @@ export function renderTable({
               return `<td>${escapeHtml(row?.[col.key] ?? '')}</td>`;
             })
             .join('');
-          return `<tr>${cells}</tr>`;
+          return `<tr class="table-row">${cells}</tr>`;
         })
         .join('')
     : `<tr><td colspan="${columns.length}" class="table-empty">${escapeHtml(emptyText)}</td></tr>`;
 
   container.innerHTML = `
-    <div class="table-wrap">
+    <div class="table-wrap" style="--table-min-width:${escapeHtml(minWidth)}">
       <table class="admin-table">
         <thead><tr>${head}</tr></thead>
         <tbody>${body}</tbody>

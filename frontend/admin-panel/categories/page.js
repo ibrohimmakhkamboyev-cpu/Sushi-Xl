@@ -2,6 +2,7 @@ import { api } from '../services/api.js';
 import { escapeHtml } from '../models/serializers.js';
 import { renderTable } from '../components/table.js';
 import { statusBadge } from '../components/badge.js';
+import { renderMetricGrid, renderPageHeader, renderSectionCard, tr } from '../components/page-shell.js';
 
 function pickLocalized(row, base, uiLang = 'en') {
   if (uiLang === 'ru') return row?.[`${base}Ru`] || row?.[base] || '';
@@ -144,13 +145,27 @@ export async function renderCategories(ctx) {
     }
 
     container.innerHTML = `
-      <section class="panel">
-        <div class="panel-head split">
-          <h2>${escapeHtml(t('categories_management'))}</h2>
-          ${state.readOnly ? `<span style="color:#64748b;font-size:13px">${escapeHtml(t('source_read_only').replace('{source}', state.source))}</span>` : `<button class="btn btn-primary" id="add-category">${escapeHtml(t('add_category'))}</button>`}
-        </div>
-        <div id="categories-table"></div>
-      </section>
+      ${renderPageHeader({
+        eyebrow: tr(uiLang, 'Menu structure', 'Структура меню', 'Menyu tuzilmasi'),
+        title: tr(uiLang, 'Category management', 'Управление категориями', 'Kategoriyalar boshqaruvi'),
+        description: tr(uiLang, 'Organize the storefront hierarchy, multilingual naming, and category order with a cleaner operations-first layout.', 'Управляйте иерархией витрины, многоязычными названиями и порядком категорий в более чистом интерфейсе.', 'Vitirinaning ierarxiyasi, ko‘p tilli nomlar va kategoriya tartibini yanada toza boshqaruv interfeysida boshqaring.'),
+        meta: [
+          { label: tr(uiLang, 'Source', 'Источник', 'Manba'), value: state.source || 'database' },
+          { label: tr(uiLang, 'Write access', 'Доступ на запись', 'Yozish huquqi'), value: state.readOnly ? tr(uiLang, 'Read only', 'Только чтение', 'Faqat o‘qish') : tr(uiLang, 'Writable', 'Доступно', 'Yozish mumkin') },
+        ],
+      })}
+      ${renderMetricGrid([
+        { label: t('categories'), value: String(state.rows.length), tone: 'accent', helper: tr(uiLang, 'Visible category groups', 'Группы категорий', 'Ko‘rinadigan kategoriya guruhlari') },
+        { label: t('active'), value: String(state.rows.filter((row) => row.isActive).length), tone: 'success', helper: tr(uiLang, 'Currently active', 'Сейчас активны', 'Hozir faol') },
+      ])}
+      ${renderSectionCard({
+        title: t('categories_management'),
+        description: tr(uiLang, 'Maintain a clear category tree and presentation order for the customer-facing menu.', 'Поддерживайте понятное дерево категорий и порядок отображения для клиентского меню.', 'Mijozlar ko‘radigan menyu uchun aniq kategoriya daraxti va ko‘rsatish tartibini saqlang.'),
+        actions: state.readOnly
+          ? statusBadge('warning', t('source_read_only').replace('{source}', state.source))
+          : `<button type="button" class="btn btn-primary" id="add-category">${escapeHtml(t('add_category'))}</button>`,
+        body: '<div id="categories-table"></div>',
+      })}
     `;
 
     const tableRoot = container.querySelector('#categories-table');
@@ -179,10 +194,10 @@ export async function renderCategories(ctx) {
         sortable: false,
         render: (row) => `
           <div class="table-actions">
-            <button class="btn btn-sm btn-muted" data-action="up" data-id="${row.id}">${escapeHtml(t('up'))}</button>
-            <button class="btn btn-sm btn-muted" data-action="down" data-id="${row.id}">${escapeHtml(t('down'))}</button>
-            <button class="btn btn-sm btn-muted" data-action="edit" data-id="${row.id}">${escapeHtml(t('edit'))}</button>
-            <button class="btn btn-sm btn-danger" data-action="delete" data-id="${row.id}">${escapeHtml(t('delete'))}</button>
+            <button type="button" class="btn btn-sm btn-muted" data-action="up" data-id="${row.id}">${escapeHtml(t('up'))}</button>
+            <button type="button" class="btn btn-sm btn-muted" data-action="down" data-id="${row.id}">${escapeHtml(t('down'))}</button>
+            <button type="button" class="btn btn-sm btn-muted" data-action="edit" data-id="${row.id}">${escapeHtml(t('edit'))}</button>
+            <button type="button" class="btn btn-sm btn-danger" data-action="delete" data-id="${row.id}">${escapeHtml(t('delete'))}</button>
           </div>
         `,
       });
@@ -200,6 +215,7 @@ export async function renderCategories(ctx) {
           drawTable();
         },
         emptyText: t('no_data'),
+        minWidth: '940px',
       });
 
       if (state.readOnly) return;

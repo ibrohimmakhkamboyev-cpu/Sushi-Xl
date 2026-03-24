@@ -7,6 +7,7 @@ import '../../data/models/cart_models.dart';
 import '../../data/models/menu_models.dart';
 import '../../core/localization/sushi_localizations.dart';
 import '../../core/format/currency.dart';
+import '../../core/widgets/remote_image_box.dart';
 
 class CartScreen extends ConsumerWidget {
   const CartScreen({super.key});
@@ -123,15 +124,12 @@ class _RecommendedCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            height: 76,
             margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
+            child: RemoteImageBox(
+              imageUrl: image,
+              height: 76,
               borderRadius: BorderRadius.circular(10),
-              image: image == null || image.isEmpty
-                  ? null
-                  : DecorationImage(
-                      image: NetworkImage(image), fit: BoxFit.cover),
-              color: Colors.black12,
+              backgroundColor: Colors.black12,
             ),
           ),
           Padding(
@@ -348,17 +346,12 @@ class _CartItemCard extends ConsumerWidget {
       color: Colors.white,
       child: Row(
         children: [
-          Container(
+          RemoteImageBox(
+            imageUrl: image,
             width: 72,
             height: 72,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              image: image == null || image.isEmpty
-                  ? null
-                  : DecorationImage(
-                      image: NetworkImage(image), fit: BoxFit.cover),
-              color: Colors.black12,
-            ),
+            borderRadius: BorderRadius.circular(14),
+            backgroundColor: Colors.black12,
           ),
           const SizedBox(width: 12),
           Expanded(

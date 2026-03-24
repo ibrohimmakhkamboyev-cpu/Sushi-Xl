@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/widgets/remote_image_box.dart';
 import '../../core/state/providers.dart';
 import '../../data/models/menu_models.dart';
 import '../../core/format/currency.dart';
@@ -721,13 +722,10 @@ class _PopularCard extends ConsumerWidget {
               children: [
                 Container(
                   margin: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
+                  child: RemoteImageBox(
+                    imageUrl: image,
                     borderRadius: BorderRadius.circular(12),
-                    image: image == null || image.isEmpty
-                        ? null
-                        : DecorationImage(
-                            image: NetworkImage(image), fit: BoxFit.cover),
-                    color: Colors.black12,
+                    backgroundColor: Colors.black12,
                   ),
                 ),
                 Positioned(

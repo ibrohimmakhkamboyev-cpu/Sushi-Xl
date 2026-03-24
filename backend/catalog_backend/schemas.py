@@ -140,6 +140,17 @@ class ProductCreateIn(BaseModel):
     isPopular: bool = False
     isNew: bool = False
 
+    @field_validator('oldPrice', mode='before')
+    @classmethod
+    def _normalize_old_price(cls, value: object) -> object:
+        if value in (None, ''):
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return value
+        return None if parsed <= 0 else parsed
+
 
 class ProductUpdateIn(ProductCreateIn):
     pass
